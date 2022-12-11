@@ -5,6 +5,7 @@ import numpy as np
 import torch
 torch.manual_seed(0)
 import torch.optim as optim
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 
 def optimize(optimizer: optim.Adam, loss: torch.Tensor) -> None: 
@@ -16,14 +17,14 @@ def optimize(optimizer: optim.Adam, loss: torch.Tensor) -> None:
 
 def get_policy_loss(rewards: list, log_probs: list) -> torch.Tensor:
     """ Return policy loss """
-    r = torch.FloatTensor(rewards)
+    r = torch.FloatTensor(rewards).to(device)
     r = (r - r.mean()) / (r.std() + float(np.finfo(np.float32).eps))
-    log_probs = torch.stack(log_probs).squeeze()
+    log_probs = torch.stack(log_probs).squeeze().to(device)
     policy_loss = torch.mul(log_probs, r).mul(-1).sum()
     return policy_loss
 
 
-def reinforce(policy_network: torch.nn.Module, env, act, alpha=1e-3, weight_decay=1e-5, exploration_rate=1, exploration_decay=(1-1e-4), exploration_min=0, num_episodes=1000, max_episode_length=np.iinfo(np.int32).max, train=True, print_res=True, print_freq=100, recurrent=False) -> tuple[np.ndarray, np.ndarray]: 
+def reinforce(policy_network: torch.nn.Module, env, act, alpha=1e-3, weight_decay=1e-5, exploration_rate=1, exploration_decay=(1-1e-4), exploration_min=0, num_episodes=1000, max_episode_length=np.iinfo(np.int32).max, train=True, print_res=True, print_freq=100, recurrent=False):# -> tuple[np.ndarray, np.ndarray]: 
     optimizer = optim.Adam(policy_network.parameters(), lr=alpha, weight_decay=weight_decay)
     reward_history = []
     action_history = []

@@ -6,14 +6,14 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.distributions import Categorical, Normal, MultivariateNormal
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+#device = "cpu"
 
-
-def get_action_pobs(net: nn.Module, state: np.ndarray, hx=None, recurrent=False) -> tuple[torch.Tensor, tuple]:
+def get_action_pobs(net: nn.Module, state: np.ndarray, hx=None, recurrent=False):# -> tuple[torch.Tensor, tuple]:
     """ Returns action probabilities and hidden state (if recurrent) from network """
     if recurrent: 
         probs, hx = net.forward(state, hx)
     else: 
-        probs = net.forward(state).cpu()
+        probs = net.forward(state)
     return probs, hx
 
 
@@ -43,18 +43,19 @@ def action_softmax_transform(action: torch.Tensor) -> torch.Tensor:
 ## ----------------- Stochastic Sampling
 ### ---------------- Discrete Action Space (Multinoulli Dist)
 # TODO maybe add random exploration to stochastic action selection
-def act_stochastic_discrete(net: nn.Module, state: np.ndarray, hx=None, recurrent=False, epsilon=0) -> tuple[float, torch.Tensor, tuple]:
+def act_stochastic_discrete(net: nn.Module, state: np.ndarray, hx=None, recurrent=False, epsilon=0):# -> tuple[float, torch.Tensor, tuple]:
     """ Returns a sampled action on {-1, 0, 1}, the log probability of choosing that action, and the hidden state """
     state = torch.from_numpy(state).float().unsqueeze(0).to(device)
     probs, hx = get_action_pobs(net, state, hx, recurrent)
     probs = F.softmax(probs, dim=1)
     m = Categorical(probs) 
     action = m.sample() 
-    return action.add(-1).numpy(), m.log_prob(action), hx
+    return action.add(-1).cpu().numpy(), m.log_prob(action), hx    
+    #return action.add(-1).numpy(), m.log_prob(action), hx
 
 
 ### ---------------- Continuous Action Space (Gaussian Dist)
-def act_stochastic_continuous_2(net: nn.Module, state: np.ndarray, hx=None, recurrent=False, epsilon=0) -> tuple[float, torch.Tensor, torch.Tensor]:
+def act_stochastic_continuous_2(net: nn.Module, state: np.ndarray, hx=None, recurrent=False, epsilon=0):# -> tuple[float, torch.Tensor, torch.Tensor]:
     """ Returns a sampled action on [-1, 1], the log probability of choosing that action, and the hidden state """
     state = torch.from_numpy(state).float().unsqueeze(0).to(device)
     mean, hx = get_action_pobs(net, state, hx, recurrent)
@@ -67,7 +68,7 @@ def act_stochastic_continuous_2(net: nn.Module, state: np.ndarray, hx=None, recu
 
 ## ----------------- Deterministic Sampling 
 ### ---------------- Discrete Action Space (DQN)
-def act_DQN(net: nn.Module, state: np.ndarray, hx=None, recurrent=False, epsilon=0) -> tuple[int, torch.Tensor]:
+def act_DQN(net: nn.Module, state: np.ndarray, hx=None, recurrent=False, epsilon=0):# -> tuple[int, torch.Tensor]:
     """ Returns the highest value action of a discrete set of actions {-1, 0, 1}, and the hidden state """
     state = torch.from_numpy(state).float().unsqueeze(0).to(device)
     with torch.no_grad():    
@@ -82,7 +83,7 @@ def act_DQN(net: nn.Module, state: np.ndarray, hx=None, recurrent=False, epsilon
 # ------------------ Portfolio
 ## ----------------- Stochastic Sampling
 ### ---------------- Long & Short 
-def act_stochastic_portfolio(net: nn.Module, state: np.ndarray, hx=None, recurrent=False, epsilon=0) -> tuple[float, torch.Tensor, tuple]:
+def act_stochastic_portfolio(net: nn.Module, state: np.ndarray, hx=None, recurrent=False, epsilon=0):# -> tuple[float, torch.Tensor, tuple]:
     """ Returns a sampled action the interval [-1, 1] for N instruments, the log probability of choosing that action, and the hidden state """
     state = torch.from_numpy(state).float().unsqueeze(0).to(device)
     probs, hx = get_action_pobs(net, state, hx, recurrent)
@@ -96,7 +97,7 @@ def act_stochastic_portfolio(net: nn.Module, state: np.ndarray, hx=None, recurre
 
 
 ### ---------------- Long only softmax weighted (sum weights = 1)
-def act_stochastic_portfolio_long(net: nn.Module, state: np.ndarray, hx=None, recurrent=False, epsilon=0) -> tuple[float, torch.Tensor, tuple]:
+def act_stochastic_portfolio_long(net: nn.Module, state: np.ndarray, hx=None, recurrent=False, epsilon=0):# -> tuple[float, torch.Tensor, tuple]:
     """ Returns a sampled action the interval [0, 1] for N instruments where all weights sum to 1, 
         the log probability of choosing that action, and the hidden state """
     state = torch.from_numpy(state).float().unsqueeze(0).to(device)
@@ -113,7 +114,7 @@ def act_stochastic_portfolio_long(net: nn.Module, state: np.ndarray, hx=None, re
 ## ----------------- Deterministic Sampling (DDPG)
 ### ---------------- Long & Short 
 # This works for both portfolio and single instrument trading
-def act_DDPG_portfolio(net: nn.Module, state: np.ndarray, hx=None, recurrent=False, epsilon=0, training=True) -> tuple[np.ndarray, torch.Tensor]:
+def act_DDPG_portfolio(net: nn.Module, state: np.ndarray, hx=None, recurrent=False, epsilon=0, training=True):# -> tuple[np.ndarray, torch.Tensor]:
     """ Returns the highest value action on a continous interval [-1, 1] for N instruments, and the hidden state """
     state = torch.from_numpy(state).float().unsqueeze(0).to(device)
     with torch.no_grad():
@@ -125,7 +126,7 @@ def act_DDPG_portfolio(net: nn.Module, state: np.ndarray, hx=None, recurrent=Fal
 
 
 ### ---------------- Long only softmax weighted (sum weights = 1)
-def act_DDPG_portfolio_long(net: nn.Module, state: np.ndarray, hx=None, recurrent=False, epsilon=0, training=True) -> tuple[np.ndarray, torch.Tensor]:
+def act_DDPG_portfolio_long(net: nn.Module, state: np.ndarray, hx=None, recurrent=False, epsilon=0, training=True):# -> tuple[np.ndarray, torch.Tensor]:
     """ Returns the highest value action on a continous interval [0, 1] for N instruments where all weights sum to 1, and the hidden state """
     state = torch.from_numpy(state).float().unsqueeze(0).to(device)
     with torch.no_grad():

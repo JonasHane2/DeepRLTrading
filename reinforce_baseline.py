@@ -1,22 +1,25 @@
+import sys, os
+sys.path.append(os.path.join(os.path.dirname(__file__))) # for relative imports
 import numpy as np
 import torch
 torch.manual_seed(0)
 import torch.optim as optim
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+#device = "cpu"
 from reinforce import optimize
+#from DeepRLTrading.reinforce import reinforce
 criterion = torch.nn.MSELoss()
 
-
-def get_policy_and_value_loss(value_function, state_batch, reward_batch, log_probs) -> tuple[torch.Tensor, torch.Tensor]:
-    state_value = value_function(state_batch).squeeze()
-    delta = reward_batch - state_value.detach()
+def get_policy_and_value_loss(value_function, state_batch, reward_batch, log_probs):# -> tuple[torch.Tensor, torch.Tensor]:
+    state_value = value_function(state_batch).squeeze().to(device)
+    delta = reward_batch.to(device) - state_value.detach()
     delta = (delta - delta.mean()) / (delta.std() + float(np.finfo(np.float32).eps))
-    policy_loss = (-log_probs * delta).mean() 
-    vf_loss = criterion(state_value, reward_batch)
+    policy_loss = (-log_probs.to(device) * delta.to(device)).mean().to(device)
+    vf_loss = criterion(state_value, reward_batch.to(device))
     return policy_loss, vf_loss
 
 
-def reinforce_baseline(policy_network: torch.nn.Module, value_function: torch.nn.Module, env, act, alpha_policy=1e-3, alpha_vf=1e-5, weight_decay=1e-5, exploration_rate=1, exploration_decay=(1-1e-4), exploration_min=0, num_episodes=1000, max_episode_length=np.iinfo(np.int32).max, train=True, print_res=True, print_freq=100, recurrent=False) -> tuple[np.ndarray, np.ndarray]: 
+def reinforce_baseline(policy_network: torch.nn.Module, value_function: torch.nn.Module, env, act, alpha_policy=1e-3, alpha_vf=1e-5, weight_decay=1e-5, exploration_rate=1, exploration_decay=(1-1e-4), exploration_min=0, num_episodes=1000, max_episode_length=np.iinfo(np.int32).max, train=True, print_res=True, print_freq=100, recurrent=False):# -> tuple[np.ndarray, np.ndarray]: 
     optimizer_policy = optim.Adam(policy_network.parameters(), lr=alpha_policy, weight_decay=weight_decay)
     optimizer_vf = optim.Adam(value_function.parameters(), lr=alpha_vf, weight_decay=weight_decay)
     reward_history = []
@@ -41,7 +44,7 @@ def reinforce_baseline(policy_network: torch.nn.Module, value_function: torch.nn
 
         for _ in range(max_episode_length):
             action, log_prob, hx = act(policy_network, state, hx, recurrent, exploration_rate) #A_{t-1}
-            state, reward, done, _ = env.step(action) # S_t, R_t 
+            state, reward, done, _ = env.step(action)#.to(device) # S_t, R_t 
             
             if done:
                 break

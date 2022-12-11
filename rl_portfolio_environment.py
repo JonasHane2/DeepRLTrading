@@ -46,7 +46,7 @@ class PortfolioEnvironment():
             return np.mean(a_return) 
         return np.mean(a_return)/(np.std(a_return) + float(np.finfo(np.float32).eps))
 
-    def step(self, action) -> tuple[np.ndarray, float, bool, dict]:
+    def step(self, action):# -> tuple[np.ndarray, float, bool, dict]:
         """
         Args:
             action

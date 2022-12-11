@@ -99,7 +99,7 @@ def normalize_prices(price: np.ndarray) -> np.ndarray:
     return price
 
 
-def get_instrument_info(df: pd.DataFrame) -> tuple[np.ndarray, pd.Series]:
+def get_instrument_info(df: pd.DataFrame):# -> tuple[np.ndarray, pd.Series]:
     non_norm_price = get_price_dataframe_1(df)
     lag = ["1D", "7D", "30D"]
     returns = [get_rolling_return(non_norm_price, l) for l in lag]

@@ -1,15 +1,20 @@
+import sys, os
+sys.path.append(os.path.join(os.path.dirname(__file__))) # for relative imports
 import numpy as np
-from batch_learning import ReplayMemory, Transition, get_batch
 import torch
 torch.manual_seed(0)
 import torch.optim as optim
+from batch_learning import ReplayMemory, Transition, get_batch
 from action_selection import get_action_pobs
 from reinforce import optimize
+#from DeepRLTrading.batch_learning import ReplayMemory, Transition, get_batch
+#from DeepRLTrading.action_selection import get_action_pobs
+#from DeepRLTrading.reinforce import optimize
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 criterion = torch.nn.MSELoss()
 
 
-def compute_loss_dqn(batch: tuple[torch.Tensor], net: torch.nn.Module, recurrent=False) -> torch.Tensor: 
+def compute_loss_dqn(batch: tuple, net: torch.nn.Module, recurrent=False) -> torch.Tensor: 
     """ Return critic loss 1/N * (Q(s_t, a_t) - R)^2 for t = 0,1,...,N """
     state_batch, action_batch, reward_batch, _ = batch
     reward_batch = (reward_batch - reward_batch.mean()) / (reward_batch.std() + float(np.finfo(np.float32).eps))
@@ -28,7 +33,7 @@ def update(replay_buffer: ReplayMemory, batch_size: int, net: torch.nn.Module, o
     optimize(optimizer, loss)
 
 
-def deep_q_network(q_net, env, act, alpha=1e-4, weight_decay=1e-5, batch_size=10, exploration_rate=1, exploration_decay=(1-1e-3), exploration_min=0, num_episodes=1000, max_episode_length=np.iinfo(np.int32).max, train=True, print_res=True, print_freq=100, recurrent=False) -> tuple[np.ndarray, np.ndarray]: 
+def deep_q_network(q_net, env, act, alpha=1e-4, weight_decay=1e-5, batch_size=10, exploration_rate=1, exploration_decay=(1-1e-3), exploration_min=0, num_episodes=1000, max_episode_length=np.iinfo(np.int32).max, train=True, print_res=True, print_freq=100, recurrent=False):# -> tuple[np.ndarray, np.ndarray]: 
     """
     Training for DQN
 

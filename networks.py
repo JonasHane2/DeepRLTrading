@@ -45,7 +45,7 @@ class AConvLSTMDiscrete(nn.Module): #DRQN
         self.lstm_layer = nn.LSTM(input_size=conv_out, hidden_size=hidden_size, num_layers=num_lstm_layers, batch_first=True, dropout=dropout)
         self.fc_out = nn.Linear(hidden_size, action_space)
 
-    def forward(self, x, hx=None) -> tuple[torch.Tensor, torch.Tensor]:
+    def forward(self, x, hx=None):# -> tuple[torch.Tensor, torch.Tensor]:
         x = self.fc_in(x)
         x = x.unsqueeze(1) 
         x = self.conv(x)
@@ -104,7 +104,7 @@ class ALSTMDiscrete(nn.Module):
         self.lstm_layer = nn.LSTM(input_size=hidden_size, hidden_size=hidden_size, num_layers=n_layers, batch_first=True, dropout=dropout)
         self.fc_out = nn.Linear(hidden_size, action_space)        
 
-    def forward(self, x, hx=None) -> tuple[torch.Tensor, torch.Tensor]:
+    def forward(self, x, hx=None):# -> tuple[torch.Tensor, torch.Tensor]:
         x = self.fc_in(x)
         if hx is not None:
             x, hx = self.lstm_layer(x, hx)

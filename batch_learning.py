@@ -11,14 +11,14 @@ class ReplayMemory(object):
         """Save a transition"""
         self.memory.append(Transition(*args))
 
-    def sample(self, batch_size: int) -> list[object]:
+    def sample(self, batch_size: int):# -> list[object]:
         return random.sample(self.memory, batch_size)
 
     def __len__(self) -> int:
         return len(self.memory)
 
 
-def get_batch(replay_buffer: ReplayMemory, batch_size: int) -> tuple[torch.Tensor]:
+def get_batch(replay_buffer: ReplayMemory, batch_size: int):# -> tuple[torch.Tensor]:
     """ Return a batch of concatenated S, A, R, S' values """
     if len(replay_buffer) < batch_size:
         return

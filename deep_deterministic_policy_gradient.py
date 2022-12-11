@@ -1,3 +1,5 @@
+import sys, os
+sys.path.append(os.path.join(os.path.dirname(__file__))) # for relative imports
 import numpy as np
 import torch
 torch.manual_seed(0)
@@ -7,6 +9,9 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 from batch_learning import ReplayMemory, Transition, get_batch
 from reinforce import optimize
 from action_selection import get_action_pobs
+#from DeepRLTrading.batch_learning import ReplayMemory, Transition, get_batch
+#from DeepRLTrading.reinforce import optimize
+#from DeepRLTrading.action_selection import get_action_pobs
 
 
 def update(replay_buffer: ReplayMemory, batch_size: int, critic: torch.nn.Module, actor: torch.nn.Module, optimizer_critic: torch.optim, optimizer_actor: torch.optim, processing, recurrent=False) -> None: 
@@ -42,7 +47,7 @@ def compute_critic_loss(critic, batch) -> torch.Tensor:
     return loss
 
 
-def deep_determinstic_policy_gradient(actor_net, critic_net, env, act, processing, alpha_actor=1e-3, alpha_critic=1e-3, weight_decay=1e-4, batch_size=30, update_freq=1, exploration_rate=1, exploration_decay=(1-1e-3), exploration_min=0, num_episodes=1000, max_episode_length=np.iinfo(np.int32).max, train=True, print_res=True, print_freq=100, recurrent=False) -> tuple[np.ndarray, np.ndarray]: 
+def deep_determinstic_policy_gradient(actor_net, critic_net, env, act, processing, alpha_actor=1e-3, alpha_critic=1e-3, weight_decay=1e-4, batch_size=30, update_freq=1, exploration_rate=1, exploration_decay=(1-1e-3), exploration_min=0, num_episodes=1000, max_episode_length=np.iinfo(np.int32).max, train=True, print_res=True, print_freq=100, recurrent=False):# -> tuple[np.ndarray, np.ndarray]: 
     """
     Training for DDPG
 
