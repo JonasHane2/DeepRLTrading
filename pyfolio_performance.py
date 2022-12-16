@@ -40,7 +40,8 @@ def create_pyfolio_compatible_returns_history(prices: pd.DataFrame, positions: p
     # Net % returns
     portfolio_returns = portfolio_returns.subtract(np.append(tc.values, 0))
     portfolio_returns = portfolio_returns.resample("1D").sum().fillna(0)
-    portfolio_returns.index = portfolio_returns.index.tz_localize('utc')
+    if portfolio_returns.index.tzinfo is None or portfolio_returns.index.tzinfo.utcoffset(portfolio_returns.index) is None:
+        portfolio_returns.index = portfolio_returns.index.tz_localize('utc')
     return portfolio_returns
 
 
@@ -51,7 +52,8 @@ def create_pyfolio_compatible_positions_history(prices: pd.DataFrame, positions:
     total_balance_history = cumul_ret.multiply(init_balance)    
     positions_hist = positions.resample("1D").last().fillna(method='ffill')
     positions_hist = positions_hist.multiply(total_balance_history.values, axis=0)
-    positions_hist.index = positions_hist.index.tz_localize('utc')
+    if positions_hist.index.tzinfo is None or positions_hist.index.tzinfo.utcoffset(positions_hist.index) is None:
+        positions_hist.index = positions_hist.index.tz_localize('utc')
     return positions_hist.set_axis(labels, axis=1)
 
 
