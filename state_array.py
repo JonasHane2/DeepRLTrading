@@ -122,7 +122,7 @@ def get_state_features(prices: pd.DataFrame, volumes: pd.DataFrame, returns_lag=
                             once for all instruments as they have the same datetime index. 
     """
     returns = [get_instrument_features(p[1], v[1], returns_lag=returns_lag) for p, v in zip(prices.iteritems(), volumes.iteritems())]
-    state = np.array(returns, dtype=object)
+    state = np.array(returns, dtype=np.float64)
     state = state.T.reshape(state.shape[2], state.shape[0]*state.shape[1])
     year = get_year_time_cycle_coordinates(prices.index)
     week = get_week_time_cycle_coordinates(prices.index)
