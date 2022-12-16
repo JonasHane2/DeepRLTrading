@@ -15,7 +15,7 @@ def percentage_returns(prices: pd.DataFrame, positions: pd.DataFrame) -> pd.Data
         The number of prices should always be one greater than the number of positions.
         It is assumed the portfolio always start with position 0. 
         The % change at price zero is also set to 0, that way the portfolios initial return is zero. """
-    # TODO this assumes that prices are always > 0, which is not the case  
+    # TODO this assumes that prices never are 0, which is not the case  
     price_changes = prices.pct_change(1)
     pos = np.insert(positions.values, 0, 0, axis=0) #insert 0 as the initial position of the portfolio
     portfolio_returns = price_changes * pos
@@ -45,21 +45,8 @@ def create_pyfolio_compatible_returns_history(prices: pd.DataFrame, positions: p
     return portfolio_returns
 
 
-def create_pyfolio_compatible_positions_history(prices: pd.DataFrame, positions: pd.DataFrame, labels: list, transaction_fraction=0.00002, init_balance=1000) -> pd.DataFrame:
-    """ Dollar amount invested in each position. Non-working capital labelled cash. """
-    portfolio_returns = create_pyfolio_compatible_returns_history(prices, positions, transaction_fraction)
-    cumul_ret = portfolio_returns.add(1).cumprod()
-    total_balance_history = cumul_ret.multiply(init_balance)    
-    positions_hist = positions.resample("1D").last().fillna(method='ffill')
-    positions_hist = positions_hist.multiply(total_balance_history.values, axis=0)
-    if positions_hist.index.tzinfo is None or positions_hist.index.tzinfo.utcoffset(positions_hist.index) is None:
-        positions_hist.index = positions_hist.index.tz_localize('utc')
-    return positions_hist.set_axis(labels, axis=1)
-
-
 def positions_numpy_to_dataframe(positions: np.ndarray, prices: pd.DataFrame, labels: list) -> pd.DataFrame:
     """ Converts our output positions numpy array to dataframe compatible with pyfolio """
-    print(prices.shape, positions.shape)
     return pd.DataFrame(positions, index=prices.index[:-1]).set_axis(labels, axis=1, inplace=False)
 
 
@@ -71,9 +58,8 @@ def get_baseline_returns_history(baseline_strat, prices: pd.DataFrame, scaled=Fa
 
 
 def get_pyfolio_history(prices: pd.DataFrame, positions: np.ndarray): 
-    """ Returns returns and position history for pyfolio """
+    """ Returns returns history for pyfolio. """
     labels = list(prices.columns)
     positions = positions_numpy_to_dataframe(positions, prices, labels)
     returns_history = create_pyfolio_compatible_returns_history(prices, positions)
-    #position_history = create_pyfolio_compatible_positions_history(prices, positions, labels) # not really needed, maybe remove
-    return returns_history#, position_history
+    return returns_history
