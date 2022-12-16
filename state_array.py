@@ -99,10 +99,10 @@ def get_instrument_features(price: pd.Series, volume: pd.Series, returns_lag=[1,
         macd (np.ndarray): an array of the moving average convergenece divergence for this price series. 
     """
     norm_price = normalize(price.values)
-    norm_volume = normalize(volume.values) + 2
+    norm_volume = normalize(volume.values) 
     log_returns = [get_log_return_dataframe(price, lag).values for lag in returns_lag] 
-    rsi = get_relative_strength_index(price).values + 4
-    macd = moving_avg_conv_div(price) + 5
+    rsi = get_relative_strength_index(price).values 
+    macd = moving_avg_conv_div(price) 
     return norm_price, norm_volume, *log_returns, rsi, macd
 
 
