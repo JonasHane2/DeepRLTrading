@@ -75,5 +75,5 @@ def get_pyfolio_history(prices: pd.DataFrame, positions: np.ndarray):
     labels = list(prices.columns)
     positions = positions_numpy_to_dataframe(positions, prices, labels)
     returns_history = create_pyfolio_compatible_returns_history(prices, positions)
-    position_history = create_pyfolio_compatible_positions_history(prices, positions, labels) # not really needed, maybe remove
-    return returns_history, position_history
+    #position_history = create_pyfolio_compatible_positions_history(prices, positions, labels) # not really needed, maybe remove
+    return returns_history#, position_history
