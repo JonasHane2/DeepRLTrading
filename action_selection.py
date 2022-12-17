@@ -88,7 +88,7 @@ def act_stochastic_portfolio(net: nn.Module, state: np.ndarray, hx=None, recurre
     state = torch.from_numpy(state).float().unsqueeze(0).to(device)
     probs, hx = get_action_pobs(net, state, hx, recurrent)
     probs = add_noise(probs, epsilon)
-    m = MultivariateNormal(probs, torch.eye(probs.size(1))).to(device) # second arg is indentity matrix of size num instruments X num instruments
+    m = MultivariateNormal(probs.to(device), torch.eye(probs.size(1)).to(device)) # second arg is indentity matrix of size num instruments X num instruments
     action = m.sample().to(device)
     logprob = m.log_prob(action)
     action = action_transform(action)
@@ -103,7 +103,7 @@ def act_stochastic_portfolio_long(net: nn.Module, state: np.ndarray, hx=None, re
     state = torch.from_numpy(state).float().unsqueeze(0).to(device)
     probs, hx = get_action_pobs(net, state, hx, recurrent) 
     probs = add_noise(probs, epsilon)
-    m = MultivariateNormal(probs, torch.eye(probs.size(1))).to(device)
+    m = MultivariateNormal(probs.to(device), torch.eye(probs.size(1)).to(device))
     action = m.sample().to(device)
     logprob = m.log_prob(action)
     action = F.softmax(action, dim=1)
