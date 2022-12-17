@@ -42,7 +42,7 @@ def compute_critic_loss(critic, batch) -> torch.Tensor:
     """ Returns error Q(s_t, a) - R_t+1 """
     state, action, reward, _ = batch
     reward = ((reward - reward.mean()) / (reward.std() + float(np.finfo(np.float32).eps))).to(device) # does this actually improve performance here?
-    q_sa = critic(state, action.view(action.shape[0], -1)).squeeze().to(device)
+    q_sa = critic(state.to(device), action.view(action.shape[0], -1).to(device)).squeeze().to(device)
     loss = torch.nn.MSELoss()(q_sa, reward)
     return loss
 
