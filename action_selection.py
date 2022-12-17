@@ -63,7 +63,7 @@ def act_stochastic_continuous_2(net: nn.Module, state: np.ndarray, hx=None, recu
     std = max(epsilon, 1e-8)
     dist = Normal(mean, std) 
     action = dist.sample() 
-    return torch.clamp(action, -1, 1).numpy().flatten(), dist.log_prob(action).to(device), hx
+    return torch.clamp(action, -1, 1).cpu().numpy().flatten(), dist.log_prob(action).to(device), hx
 
 
 ## ----------------- Deterministic Sampling 
@@ -76,7 +76,7 @@ def act_DQN(net: nn.Module, state: np.ndarray, hx=None, recurrent=False, epsilon
     if random.random() < epsilon:
         action = np.array([np.random.randint(-1, 2)]) #random int on interval [-1, 2)
     else:
-        action = action_vals.argmax().add(-1).numpy().flatten()
+        action = action_vals.argmax().add(-1).cpu().numpy().flatten()
     return action, hx
 
 
@@ -92,7 +92,7 @@ def act_stochastic_portfolio(net: nn.Module, state: np.ndarray, hx=None, recurre
     action = m.sample()
     logprob = m.log_prob(action)
     action = action_transform(action)
-    action = action.numpy().flatten()
+    action = action.cpu().numpy().flatten()
     return action, logprob.to(device), hx
 
 
@@ -107,7 +107,7 @@ def act_stochastic_portfolio_long(net: nn.Module, state: np.ndarray, hx=None, re
     action = m.sample()
     logprob = m.log_prob(action)
     action = F.softmax(action, dim=1)
-    action = action.numpy().flatten()
+    action = action.cpu().numpy().flatten()
     return action, logprob.to(device), hx
 
 
@@ -121,7 +121,7 @@ def act_DDPG_portfolio(net: nn.Module, state: np.ndarray, hx=None, recurrent=Fal
         action, hx = get_action_pobs(net, state, hx, recurrent)
     action = add_noise(action, epsilon, training)
     action = action_transform(action)
-    action = action.numpy().flatten()
+    action = action.cpu().numpy().flatten()
     return action, hx
 
 
@@ -133,5 +133,5 @@ def act_DDPG_portfolio_long(net: nn.Module, state: np.ndarray, hx=None, recurren
         action, hx = get_action_pobs(net, state, hx, recurrent)
     action = add_noise(action, epsilon, training)
     action = action_softmax_transform(action)
-    action = action.numpy().flatten() 
+    action = action.cpu().numpy().flatten()
     return action, hx
