@@ -32,8 +32,8 @@ def update(replay_buffer: ReplayMemory, batch_size: int, critic: torch.nn.Module
 def compute_actor_loss(actor, critic, state, processing, recurrent=False) -> torch.Tensor: 
     """ Returns policy loss -Q(s, mu(s)) """
     action, _ = get_action_pobs(net=actor, state=state, recurrent=recurrent)
-    action = processing(action).to(device)
-    q_sa = critic(state, action).to(device)
+    action = processing(action)#.to(device)
+    q_sa = critic(state.to(device), action.to(device))#.to(device)
     loss = -1*torch.mean(q_sa) 
     return loss
 
@@ -41,8 +41,8 @@ def compute_actor_loss(actor, critic, state, processing, recurrent=False) -> tor
 def compute_critic_loss(critic, batch) -> torch.Tensor: 
     """ Returns error Q(s_t, a) - R_t+1 """
     state, action, reward, _ = batch
-    reward = ((reward - reward.mean()) / (reward.std() + float(np.finfo(np.float32).eps))).to(device) # does this actually improve performance here?
-    q_sa = critic(state.to(device), action.view(action.shape[0], -1).to(device)).squeeze().to(device)
+    reward = ((reward - reward.mean()) / (reward.std() + float(np.finfo(np.float32).eps)))#.to(device) # does this actually improve performance here?
+    q_sa = critic(state.to(device), action.view(action.shape[0], -1).to(device)).squeeze()#.to(device)
     loss = torch.nn.MSELoss()(q_sa, reward)
     return loss
 
