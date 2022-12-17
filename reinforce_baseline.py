@@ -7,7 +7,6 @@ import torch.optim as optim
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 #device = "cpu"
 from reinforce import optimize
-#from DeepRLTrading.reinforce import reinforce
 criterion = torch.nn.MSELoss()
 
 def get_policy_and_value_loss(value_function, state_batch, reward_batch, log_probs):# -> tuple[torch.Tensor, torch.Tensor]:
@@ -15,7 +14,7 @@ def get_policy_and_value_loss(value_function, state_batch, reward_batch, log_pro
     delta = reward_batch.to(device) - state_value.detach()
     delta = (delta - delta.mean()) / (delta.std() + float(np.finfo(np.float32).eps))
     policy_loss = (-log_probs.to(device) * delta.to(device)).mean().to(device)
-    vf_loss = criterion(state_value, reward_batch.to(device))
+    vf_loss = criterion(state_value, reward_batch.to(device)).to(device)
     return policy_loss, vf_loss
 
 

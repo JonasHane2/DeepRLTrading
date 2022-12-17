@@ -7,9 +7,6 @@ import torch.optim as optim
 from batch_learning import ReplayMemory, Transition, get_batch
 from action_selection import get_action_pobs
 from reinforce import optimize
-#from DeepRLTrading.batch_learning import ReplayMemory, Transition, get_batch
-#from DeepRLTrading.action_selection import get_action_pobs
-#from DeepRLTrading.reinforce import optimize
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 criterion = torch.nn.MSELoss()
 
@@ -17,11 +14,11 @@ criterion = torch.nn.MSELoss()
 def compute_loss_dqn(batch: tuple, net: torch.nn.Module, recurrent=False) -> torch.Tensor: 
     """ Return critic loss 1/N * (Q(s_t, a_t) - R)^2 for t = 0,1,...,N """
     state_batch, action_batch, reward_batch, _ = batch
-    reward_batch = (reward_batch - reward_batch.mean()) / (reward_batch.std() + float(np.finfo(np.float32).eps))
+    reward_batch = ((reward_batch - reward_batch.mean()) / (reward_batch.std() + float(np.finfo(np.float32).eps))).to(device)
     action_batch = action_batch.flatten().long().add(1) #add 1 because -1 actions before
     state_vals, _ = get_action_pobs(net=net, state=state_batch, recurrent=recurrent)
     state_action_vals = state_vals[range(action_batch.size(0)), action_batch]
-    return criterion(state_action_vals, reward_batch)
+    return criterion(state_action_vals, reward_batch).to(device)
 
 
 def update(replay_buffer: ReplayMemory, batch_size: int, net: torch.nn.Module, optimizer: torch.optim, recurrent=False) -> None:

@@ -20,7 +20,7 @@ def get_policy_loss(rewards: list, log_probs: list) -> torch.Tensor:
     r = torch.FloatTensor(rewards).to(device)
     r = (r - r.mean()) / (r.std() + float(np.finfo(np.float32).eps))
     log_probs = torch.stack(log_probs).squeeze().to(device)
-    policy_loss = torch.mul(log_probs, r).mul(-1).sum()
+    policy_loss = torch.mul(log_probs, r).mul(-1).sum().to(device)
     return policy_loss
 
 
