@@ -21,20 +21,20 @@ def add_noise(action: torch.Tensor, epsilon=0, training=True) -> torch.Tensor:
     """ Adds random noise to the actions """
     noise = ((np.random.rand((action.shape[1])) * 2) - 1) #TODO maybe change to Ornstein-Uhlenbeck process
     noise = noise * training * max(epsilon,0) 
-    action = action.add(torch.FloatTensor(noise))
+    action = action.add(torch.FloatTensor(noise).to(device)).to(device)
     return action
 
 
 def action_transform(action: torch.Tensor) -> torch.Tensor:
     """ Returns the tanh of the action """
-    action = torch.tanh(action)
+    action = torch.tanh(action).to(device)
     return action
 
 
 def action_softmax_transform(action: torch.Tensor) -> torch.Tensor:
     """ Returns the softmax of the action_transform """
     action = action_transform(action)
-    action = F.softmax(action, dim=1)
+    action = F.softmax(action, dim=1).to(device)
     return action
 
 
