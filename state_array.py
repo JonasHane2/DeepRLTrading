@@ -22,7 +22,7 @@ def get_day_time_cycle_coordinates(timestamps) -> np.ndarray:
     return get_coordinates(day_pos)
 
 
-def get_price_dataframe_2(df: pd.DataFrame, freq='1H') -> pd.Series:
+def get_price_dataframe_2(df: pd.DataFrame, freq='1D') -> pd.Series:
     """ Returns the quoted price at some freq, forward fills missing values 
         it only gets the last observed price before that freq period,
         otherwise the agent would get information that is not yet available """
@@ -32,13 +32,15 @@ def get_price_dataframe_2(df: pd.DataFrame, freq='1H') -> pd.Series:
     return price
 
 
-def get_log_return_dataframe(price: pd.Series, period=1) -> pd.DataFrame:
-    """ Returns the log returns at a specified period. 
+def get_log_return_dataframe(price: pd.Series, period=1, volatility_period=20) -> pd.DataFrame:
+    """ Returns log returns at a specified period normalised by volatility adjusting. 
         TODO doesn't work when the price is zero, which has happened. """
     returns = price.pct_change(period)
     returns = returns.fillna(0)
-    returns = returns+1
-    returns = np.log(returns) 
+    returns = np.log(returns+1) 
+    rolling_volatility = returns.rolling(volatility_period*period).std()
+    returns = returns.divide(rolling_volatility*np.sqrt(period)*np.sqrt(volatility_period))
+    returns = returns.fillna(0)
     return returns
 
 
@@ -76,7 +78,7 @@ def normalize(series: np.ndarray) -> np.ndarray:
     return series
 
 
-def get_volume_dataframe(df: pd.DataFrame, index: list, freq="1H") -> pd.Series:
+def get_volume_dataframe(df: pd.DataFrame, index: list, freq="1D") -> pd.Series:
     """ Returns the total trade volume for some instrument at some frequency """
     volume = df['Volume'].resample(freq).sum()
     volume.index = volume.index.shift(1)
@@ -84,7 +86,7 @@ def get_volume_dataframe(df: pd.DataFrame, index: list, freq="1H") -> pd.Series:
     return volume
 
 
-def get_instrument_features(price: pd.Series, volume: pd.Series, returns_lag=[1,3,12]): 
+def get_instrument_features(price: pd.Series, volume: pd.Series, returns_lag=[1,7,30]): 
     """ 
     Args: 
         prices (pd.Series): the price series for one instrument.
@@ -106,7 +108,7 @@ def get_instrument_features(price: pd.Series, volume: pd.Series, returns_lag=[1,
     return norm_price, norm_volume, *log_returns, rsi, macd
 
 
-def get_state_features(prices: pd.DataFrame, volumes: pd.DataFrame, returns_lag=[1,3,12]) -> np.ndarray:
+def get_state_features(prices: pd.DataFrame, volumes: pd.DataFrame, returns_lag=[1,7,30]) -> np.ndarray:
     """ 
     Args: 
         prices (pd.DataFrame): the price series for one or more instruments. 
@@ -131,8 +133,8 @@ def get_state_features(prices: pd.DataFrame, volumes: pd.DataFrame, returns_lag=
     return state
 
 
-def get_state_array_2(dfs: list, labels: list, freq="1H", returns_lag=[1,3,12], riskfree_asset=False) -> np.ndarray: 
-    """     
+def get_state_array_2(dfs: list, labels: list, freq="1D", returns_lag=[1,7,30], riskfree_asset=False) -> np.ndarray: 
+    """
     Args:
         dfs (list): a list of dataframes that consists of trade information of different instruments.
                     Each dataframe must have a column 'DateTime', 'Price', and 'Volume'. 
