@@ -1,7 +1,9 @@
+import sys, os
+sys.path.append(os.path.join(os.path.dirname(__file__))) # for relative imports
 import numpy as np
 import pandas as pd
 from sklearn.preprocessing import MinMaxScaler
-
+from bars import Bars
 
 def get_coordinates(positions: np.ndarray) -> np.ndarray:
     return np.array((np.sin(positions), np.cos(positions)))
@@ -133,13 +135,14 @@ def get_state_features(prices: pd.DataFrame, volumes: pd.DataFrame, returns_lag=
     return state
 
 
-def get_state_array_2(dfs: list, labels: list, freq="1D", returns_lag=[1,7,30], riskfree_asset=False) -> np.ndarray: 
+def get_state_array_2(dfs: list, labels: list, freq="1D", returns_lag=[1,7,30], riskfree_asset=False): 
     """
     Args:
         dfs (list): a list of dataframes that consists of trade information of different instruments.
                     Each dataframe must have a column 'DateTime', 'Price', and 'Volume'. 
         labels (list): a list of labels for each instrument. 
         freq (str): a string specifying the frequency at which to resample the observations.
+        returns_lag (list): a list of lags to calculate the returns from.
         riskfree_asset (bool): if true, a riskfree asset is added as the first asset in the state array.
     Returns:
         state (np.ndarray): the state vector designed to be compatible with a deep RL agent. 
@@ -155,17 +158,64 @@ def get_state_array_2(dfs: list, labels: list, freq="1D", returns_lag=[1,7,30], 
     prices_intersection = [p.loc[p.index.intersection(index_intersection)] for p in prices]
     volumes = [get_volume_dataframe(d, index_intersection, freq) for d in dfs]
 
-    if riskfree_asset:
-        labels.insert(0, 'cash')
-        riskfree_asset_price = prices_intersection[0].copy()
-        riskfree_asset_price.values[:] = 1
-        prices_intersection.insert(0, riskfree_asset_price)
-        riskfree_asset_volume = volumes[0].copy()
-        riskfree_asset_volume.values[:] = 0 
-        volumes.insert(0, riskfree_asset_volume)
-
     non_norm_prices = pd.DataFrame(list(map(list, zip(*prices_intersection))), index=index_intersection).set_axis(labels, axis=1, inplace=False)
     non_norm_prices.index = non_norm_prices.index.tz_localize('utc')
     non_norm_volumes = pd.DataFrame(list(map(list, zip(*volumes))), index=index_intersection).set_axis(labels, axis=1, inplace=False)
+    if riskfree_asset:
+        non_norm_prices, non_norm_volumes = add_riskfree_asset(non_norm_prices, non_norm_volumes)
     state = get_state_features(non_norm_prices, non_norm_volumes, returns_lag)
     return state, non_norm_prices
+
+
+def add_riskfree_asset(prices: pd.DataFrame, volumes: pd.DataFrame):
+    """ adds riskfree asset to price and volumes dataframe """
+    prices.insert(0, 'cash', np.ones(len(prices)))
+    volumes.insert(0, 'cash', np.zeros(len(volumes)))
+    return prices, volumes
+
+
+def get_price_dataframe_1(df: pd.DataFrame, idx: list) -> pd.Series:
+    """ Finds the prices that are backwards closest to a list of indicies. """
+    price = df['Price']
+    lst = [price.loc[:id][-1] for id in idx]
+    price = pd.Series(lst, index=idx)
+    return price
+
+
+def get_state_array_bars(dfs: list, labels: list, bar_type='tick', avg_bars_per_day=1, returns_lag=[1,7,30], riskfree_asset=False): 
+    """
+    Args:
+        dfs (list): a list of dataframes that consists of trade information of different instruments.
+                    Each dataframe must have a column 'DateTime', 'Price', and 'Volume'. 
+        labels (list): a list of labels for each instrument. 
+        bar_type (str): a string specifying the the bar type, can be 'tick', 'volume', or 'dollar.
+        avg_bars_per_day (float): the target average number of bars to be sampled each day.
+        returns_lag (list): a list of lags to calculate the returns from.
+        riskfree_asset (bool): if true, a riskfree asset is added as the first asset in the state array.
+    Returns:
+        state (np.ndarray): the state vector designed to be compatible with a deep RL agent. 
+                            See get_state_features() for a more in-depth explanation. 
+        non_norm_prices (pd.DataFrame): a dataframe consisting of the non normalized prices of every
+                                        instrument in the state array (including the riskfree asset if used). 
+    """
+    dfs = [d.set_index('DateTime').sort_index() for d in dfs]
+    bars = Bars(bar_type=bar_type, avg_bars_per_day=avg_bars_per_day)
+    indices = [bars.get_all_bar_ids(d) for d in dfs]
+    index_union = list(set(indices[0]).union(*indices))
+    index_union.sort()
+
+    latest_first_id = np.sort([d.index[0] for d in dfs])[-1]
+    earliest_last_id = np.sort([d.index[-1] for d in dfs])[0]
+    index_union = np.array(index_union)
+    index_union = index_union[index_union>latest_first_id]
+    index_union = index_union[index_union<earliest_last_id]
+
+    prices = [get_price_dataframe_1(d, index_union) for d in dfs]
+    non_norm_prices = pd.DataFrame(list(map(list, zip(*prices))), index=index_union).set_axis(labels, axis=1, inplace=False)
+    non_norm_prices.index = non_norm_prices.index.tz_localize('utc')
+    # TODO no point in having volume here, but have to for the moment
+    non_norm_volumes = pd.DataFrame(np.zeros(non_norm_prices.shape), index=index_union).set_axis(labels, axis=1, inplace=False)
+    if riskfree_asset:
+        non_norm_prices, non_norm_volumes = add_riskfree_asset(non_norm_prices, non_norm_volumes)  
+    states = get_state_features(non_norm_prices, non_norm_volumes, returns_lag=returns_lag)
+    return states, non_norm_prices
