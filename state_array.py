@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 from sklearn.preprocessing import MinMaxScaler
 from datetime import timedelta
-from bars import Bars
+from bars import Bars, ImbalanceBars
 
 
 def get_coordinates(positions: np.ndarray) -> np.ndarray:
@@ -197,7 +197,7 @@ def get_state_array_time_freq(dfs: list, labels: list, freq="1D", returns_lag=[1
     return get_state_and_non_norm_price(prices_intersection, volumes, index_intersection, labels, returns_lag, riskfree_asset)
 
 
-def get_state_array_bars(dfs: list, labels: list, bar_type='tick', avg_bars_per_day=1, returns_lag=[1,7,30], riskfree_asset=False): 
+def get_state_array_bars(dfs: list, labels: list, bar_type='tick', avg_bars_per_day=1, returns_lag=[1,7,30], riskfree_asset=False, imbalance_bars=False): 
     """
     Args:
         dfs (list): a list of dataframes that consists of trade information of different instruments.
@@ -207,6 +207,7 @@ def get_state_array_bars(dfs: list, labels: list, bar_type='tick', avg_bars_per_
         avg_bars_per_day (float): the target average number of bars to be sampled each day.
         returns_lag (list): a list of lags to calculate the returns from.
         riskfree_asset (bool): if true, a riskfree asset is added as the first asset in the state array.
+        imbalance_bars (bool): uses imbalance bars if true, and normal bars if false. 
     Returns:
         state (np.ndarray): the state vector designed to be compatible with a deep RL agent. 
                             See get_state_features() for a more in-depth explanation. 
@@ -214,7 +215,10 @@ def get_state_array_bars(dfs: list, labels: list, bar_type='tick', avg_bars_per_
                                         instrument in the state array (including the riskfree asset if used). 
     """
     dfs = [d.set_index('DateTime').sort_index() for d in dfs]
-    bars = Bars(bar_type=bar_type, avg_bars_per_day=avg_bars_per_day)
+    if imbalance_bars:
+        bars = ImbalanceBars(bar_type=bar_type, avg_bars_per_day=avg_bars_per_day)
+    else:
+        bars = Bars(bar_type=bar_type, avg_bars_per_day=avg_bars_per_day)
     indices = [bars.get_all_bar_ids(d) for d in dfs]
     index_union = list(set(indices[0]).union(*indices))
     index_union.sort()
