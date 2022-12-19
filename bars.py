@@ -47,8 +47,6 @@ class Bars():
 
     def get_all_bar_ids(self, trades: pd.DataFrame) -> list:
         """
-        Finds the index of all trades that pushes the theta over the selected threshold.
-
         Args: 
             trades (DataFrame): list of all trades
         Returns: 
@@ -74,29 +72,20 @@ class ImbalanceBars(Bars):
         self.days_between_samples = []
 
     def tick_rule(self, curr_price: float) -> float:
-        """
-        Returns the sign of the change in closing price from time i-1 to i. 
-        If there is no change, it returns the previous sign. Since b[0] is 
-        initialized to 0 this value always exists. 
-        Args: 
-            prev_price (number): previous price
-            cur_price (number): current price
-        Returns: 
-            (float): sign of price change (+1./-1.), returns previous sign if no 
-                    change
-        """
+        """ Returns the sign of the price change, or the previous sign if the price is unchanged. """
         delta = curr_price - self.prev_price 
         return np.sign(delta) if delta != 0 else self.b[-1]
 
-    def register_new_tick(self, trade: pd.Series) -> bool:
+    def register_new_tick(self, trade: pd.Series, prev_observation_date: pd.Timestamp) -> bool:
         """
-        Registers a new tick by updating all relevant variables and checks 
-        if threshold is broken. If it is then the new threshold is calculated
-        and the theta is reset. 
+        Registers a new tick by updating all relevant variables and checks if threshold 
+        is broken. If it is then the theta is reset and True is returned. If the time 
+        since a tick was last registered exceeds the target average the threshold is lowered. 
+
         Args: 
-            trade (series): information about a tick
+            trade (pd.Series): a single trade. 
         Retruns:
-            (bool): True if threshold is broken, False otherwise
+            (bool): True if threshold is broken, False otherwise.
         """
         price = trade['Price']
         self.b.append(self.tick_rule(price))
@@ -106,17 +95,17 @@ class ImbalanceBars(Bars):
         if abs(self.theta) >= self.threshold:
             self.theta = 0
             return True 
+        current_num_days = (trade.name - prev_observation_date).days
+        if current_num_days > (1/self.avg_bars_per_day):
+            self.threshold *= 0.9
         return False 
 
     def get_imbalance_threshold_estimates(self, trades: pd.DataFrame, avg_bars_per_day=100) -> float:
-        """
-        (bad) estimate for what the threshold should be to generate a bar 
-        every n ticks
-        """
+        """ Estimate for what the threshold should be to generate 'avg_bars_per_day' imbalance bars per day. """
         return np.log(self.get_threshold(trades, avg_bars_per_day))
 
     def update_threshold(self, idx: list) -> None:
-        """ threshold = threshold / (avg(historical_sample_freq)*target_samples_per_day) """
+        """ Adjusts the threshold by comparing the previous sample frequency to the target. """
         avg_lookback_window = 60
         self.days_between_samples.append((idx[-1]-idx[-2]).days)
         if len(self.days_between_samples) >= avg_lookback_window:
@@ -126,19 +115,15 @@ class ImbalanceBars(Bars):
 
     def get_all_imbalance_ids(self, trades: pd.DataFrame) -> list:
         """
-        Returns a list of all the times when the imalance threshold
-        is broken in the list of trades. 
-        There is a possibility that the first tick is added twice, 
-        so duplicates are removed from the list
         Args: 
-            trades (DataFrame): list of all trades
+            trades (DataFrame): list of all trades indexed by datetime and sorted. 
         Returns: 
-            (list): indexes of when the threshold is reached
+            (list): datetimes of when the threshold is reached. 
         """
         self.threshold = self.get_imbalance_threshold_estimates(trades, self.avg_bars_per_day)
         idx = [trades.index[0]]
         for i, row in trades.iterrows():
-            if self.register_new_tick(row):
+            if self.register_new_tick(row, idx[-1]):
                 idx.append(i)
                 self.update_threshold(idx)
         return list(dict.fromkeys(idx))
