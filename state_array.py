@@ -3,7 +3,9 @@ sys.path.append(os.path.join(os.path.dirname(__file__))) # for relative imports
 import numpy as np
 import pandas as pd
 from sklearn.preprocessing import MinMaxScaler
+from datetime import timedelta
 from bars import Bars
+
 
 def get_coordinates(positions: np.ndarray) -> np.ndarray:
     return np.array((np.sin(positions), np.cos(positions)))
@@ -24,13 +26,21 @@ def get_day_time_cycle_coordinates(timestamps) -> np.ndarray:
     return get_coordinates(day_pos)
 
 
-def get_price_dataframe_2(df: pd.DataFrame, freq='1D') -> pd.Series:
+def get_price_time_freq(df: pd.DataFrame, freq='1D') -> pd.Series:
     """ Returns the quoted price at some freq, forward fills missing values 
         it only gets the last observed price before that freq period,
         otherwise the agent would get information that is not yet available """
     price = df['Price'].resample(freq).last() # maybe mean()
     price = price.fillna(method='ffill')
     price.index = price.index.shift(1) # not sure if this is a good idea
+    return price
+
+
+def get_price_dataframe_bars(df: pd.DataFrame, idx: list) -> pd.Series:
+    """ Finds the prices that are backwards closest to a list of indicies. """
+    price = df['Price']
+    lst = [price.loc[:id][-1] for id in idx]
+    price = pd.Series(lst, index=idx)
     return price
 
 
@@ -80,11 +90,20 @@ def normalize(series: np.ndarray) -> np.ndarray:
     return series
 
 
-def get_volume_dataframe(df: pd.DataFrame, index: list, freq="1D") -> pd.Series:
+def get_volume_time_freq(df: pd.DataFrame, index: list, freq="1D") -> pd.Series:
     """ Returns the total trade volume for some instrument at some frequency """
     volume = df['Volume'].resample(freq).sum()
     volume.index = volume.index.shift(1)
     volume = volume.loc[volume.index.intersection(index)] 
+    return volume
+
+
+def get_volume_dataframe_bars(df: pd.DataFrame, idx: list) -> pd.Series: 
+    """ Finds the trade volume for an instrument between dates. """
+    volume = df['Volume']
+    lst = [volume.loc[id1 + timedelta(seconds=1):id2].sum() for id1, id2 in zip(idx[:-1], idx[1:])]
+    lst = [0] + lst
+    volume = pd.Series(lst, index=idx)
     return volume
 
 
@@ -135,7 +154,25 @@ def get_state_features(prices: pd.DataFrame, volumes: pd.DataFrame, returns_lag=
     return state
 
 
-def get_state_array_2(dfs: list, labels: list, freq="1D", returns_lag=[1,7,30], riskfree_asset=False): 
+def add_riskfree_asset(prices: pd.DataFrame, volumes: pd.DataFrame):
+    """ adds riskfree asset to price and volumes dataframe """
+    prices.insert(0, 'cash', np.ones(len(prices)))
+    volumes.insert(0, 'cash', np.zeros(len(volumes)))
+    return prices, volumes
+
+
+def get_state_and_non_norm_price(prices: list, volumes: list, idx: list, labels: list, returns_lag=[1,7,30], riskfree_asset=False): 
+    """ Creates the price and volume dataframe, adds riskfree asset if specified, and gets the state array. """
+    non_norm_prices = pd.DataFrame(list(map(list, zip(*prices))), index=idx).set_axis(labels, axis=1, inplace=False)
+    non_norm_prices.index = non_norm_prices.index.tz_localize('utc')
+    non_norm_volumes = pd.DataFrame(list(map(list, zip(*volumes))), index=idx).set_axis(labels, axis=1, inplace=False)
+    if riskfree_asset:
+        non_norm_prices, non_norm_volumes = add_riskfree_asset(non_norm_prices, non_norm_volumes)  
+    states = get_state_features(non_norm_prices, non_norm_volumes, returns_lag=returns_lag)
+    return states, non_norm_prices
+
+
+def get_state_array_time_freq(dfs: list, labels: list, freq="1D", returns_lag=[1,7,30], riskfree_asset=False): 
     """
     Args:
         dfs (list): a list of dataframes that consists of trade information of different instruments.
@@ -151,35 +188,13 @@ def get_state_array_2(dfs: list, labels: list, freq="1D", returns_lag=[1,7,30], 
                                         instrument in the state array (including the riskfree asset if used). 
     """
     dfs = [d.set_index('DateTime') for d in dfs]
-    prices = [get_price_dataframe_2(d, freq) for d in dfs]
+    prices = [get_price_time_freq(d, freq) for d in dfs]
     indices = [d.index for d in prices]
     index_intersection = list(set(indices[0]).intersection(*indices))
     index_intersection.sort() 
     prices_intersection = [p.loc[p.index.intersection(index_intersection)] for p in prices]
-    volumes = [get_volume_dataframe(d, index_intersection, freq) for d in dfs]
-
-    non_norm_prices = pd.DataFrame(list(map(list, zip(*prices_intersection))), index=index_intersection).set_axis(labels, axis=1, inplace=False)
-    non_norm_prices.index = non_norm_prices.index.tz_localize('utc')
-    non_norm_volumes = pd.DataFrame(list(map(list, zip(*volumes))), index=index_intersection).set_axis(labels, axis=1, inplace=False)
-    if riskfree_asset:
-        non_norm_prices, non_norm_volumes = add_riskfree_asset(non_norm_prices, non_norm_volumes)
-    state = get_state_features(non_norm_prices, non_norm_volumes, returns_lag)
-    return state, non_norm_prices
-
-
-def add_riskfree_asset(prices: pd.DataFrame, volumes: pd.DataFrame):
-    """ adds riskfree asset to price and volumes dataframe """
-    prices.insert(0, 'cash', np.ones(len(prices)))
-    volumes.insert(0, 'cash', np.zeros(len(volumes)))
-    return prices, volumes
-
-
-def get_price_dataframe_1(df: pd.DataFrame, idx: list) -> pd.Series:
-    """ Finds the prices that are backwards closest to a list of indicies. """
-    price = df['Price']
-    lst = [price.loc[:id][-1] for id in idx]
-    price = pd.Series(lst, index=idx)
-    return price
+    volumes = [get_volume_time_freq(d, index_intersection, freq) for d in dfs]
+    return get_state_and_non_norm_price(prices_intersection, volumes, index_intersection, labels, returns_lag, riskfree_asset)
 
 
 def get_state_array_bars(dfs: list, labels: list, bar_type='tick', avg_bars_per_day=1, returns_lag=[1,7,30], riskfree_asset=False): 
@@ -203,19 +218,11 @@ def get_state_array_bars(dfs: list, labels: list, bar_type='tick', avg_bars_per_
     indices = [bars.get_all_bar_ids(d) for d in dfs]
     index_union = list(set(indices[0]).union(*indices))
     index_union.sort()
-
     latest_first_id = np.sort([d.index[0] for d in dfs])[-1]
     earliest_last_id = np.sort([d.index[-1] for d in dfs])[0]
     index_union = np.array(index_union)
     index_union = index_union[index_union>latest_first_id]
     index_union = index_union[index_union<earliest_last_id]
-
-    prices = [get_price_dataframe_1(d, index_union) for d in dfs]
-    non_norm_prices = pd.DataFrame(list(map(list, zip(*prices))), index=index_union).set_axis(labels, axis=1, inplace=False)
-    non_norm_prices.index = non_norm_prices.index.tz_localize('utc')
-    # TODO no point in having volume here, but have to for the moment
-    non_norm_volumes = pd.DataFrame(np.zeros(non_norm_prices.shape), index=index_union).set_axis(labels, axis=1, inplace=False)
-    if riskfree_asset:
-        non_norm_prices, non_norm_volumes = add_riskfree_asset(non_norm_prices, non_norm_volumes)  
-    states = get_state_features(non_norm_prices, non_norm_volumes, returns_lag=returns_lag)
-    return states, non_norm_prices
+    prices = [get_price_dataframe_bars(d, index_union) for d in dfs]
+    volumes = [get_volume_dataframe_bars(d, index_union) for d in dfs]
+    return get_state_and_non_norm_price(prices, volumes, index_union, labels, returns_lag, riskfree_asset)
