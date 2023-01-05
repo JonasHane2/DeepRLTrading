@@ -1,10 +1,10 @@
 import numpy as np
+from transaction_cost_model import transaction_cost_model
 
 
-#TODO how to calculate transaction costs with normalized prices
-def asset_return(position_new, position_old, price_new, price_old, transaction_fraction=0.002) -> float:
-    """ R_t = A_{t-1} * (p_t - p_{t-1}) - p_{t-1} * c * |A_{t-1} - A_{t-2}| """ 
-    return position_new * (price_new - price_old) - (price_old * transaction_fraction * abs(position_new - position_old))
+def asset_return(position_new, position_old, price_new, price_old, transaction_fraction=0.0002) -> float:
+    """ R_t = A_{t-1} * (p_t - p_{t-1}) - transaction costs """ 
+    return position_new * (price_new - price_old) - transaction_cost_model(position_new, position_old, price_new, price_old, transaction_fraction)[0]
 
 
 class PortfolioEnvironment():

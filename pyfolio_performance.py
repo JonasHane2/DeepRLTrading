@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 from scipy.special import softmax
+from transaction_cost_model import transaction_cost_model
 
 
 def long_only_portfolio(prices: pd.DataFrame, scaled=False) -> pd.DataFrame: 
@@ -22,6 +23,15 @@ def percentage_returns(prices: pd.DataFrame, positions: pd.DataFrame) -> pd.Data
     return portfolio_returns
 
 
+def transaction_cost_history(prices: pd.DataFrame, positions: pd.DataFrame, transaction_fraction=0.00002) -> pd.Series:
+    """ Returns a series of the transaction costs paid during the trading history. """
+    pval = np.insert(positions.values, [0], positions.iloc[0]*transaction_fraction, axis=0)
+    tc2 = transaction_cost_model(position_new=pval[1:], position_old=pval[:-1], price_new=prices.values[1:], price_old=prices.values[:-1], transaction_fraction=transaction_fraction)
+    tc2 = np.sum(tc2, axis=1)
+    tc2 = pd.Series(tc2, index=positions.index)
+    return tc2
+
+
 def create_pyfolio_compatible_returns_history(prices: pd.DataFrame, positions: pd.DataFrame, transaction_fraction=0.00002) -> pd.Series:
     """ Takes the prices of all instruments and their corresponding positions as argument.
         Calculates their noncumulative returns individually and takes the sum. 
@@ -33,8 +43,7 @@ def create_pyfolio_compatible_returns_history(prices: pd.DataFrame, positions: p
     portfolio_returns = portfolio_returns.divide(100)
 
     # Transaction costs as a % 
-    tc = positions.diff(1).abs().sum(axis=1).multiply(transaction_fraction)
-    tc.iloc[0] = sum(abs(positions.iloc[0])) * transaction_fraction
+    tc = transaction_cost_history(prices, positions, transaction_fraction)
     tc = tc.divide(100)
 
     # Net % returns
