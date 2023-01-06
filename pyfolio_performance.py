@@ -16,7 +16,6 @@ def percentage_returns(prices: pd.DataFrame, positions: pd.DataFrame) -> pd.Data
         The number of prices should always be one greater than the number of positions.
         It is assumed the portfolio always start with position 0. 
         The % change at price zero is also set to 0, that way the portfolios initial return is zero. """
-    # TODO this assumes that prices never are 0, which is not the case  
     price_changes = prices.pct_change(1)
     pos = np.insert(positions.values, 0, 0, axis=0) #insert 0 as the initial position of the portfolio
     portfolio_returns = price_changes * pos

@@ -12,12 +12,13 @@ def transaction_cost_model(position_new, position_old, price_new, price_old, tra
     if len(price_old.shape) == 1:
         price_old = np.array([price_old])
 
-    volatility = np.std((price_new / price_old), axis=0)
+    volatility = np.std((price_new / (price_old + float(np.finfo(np.float32).eps))), axis=0)    
     trade_size = size_of_trade(position_new, position_old, price_new, price_old)
     c_n_f = comissions_and_fees(trade_size=trade_size, transaction_fraction=transaction_fraction)
     slip = slippage(trade_size=trade_size, volatility=volatility)
     m_imp = market_impact(trade_size=trade_size, volatility=volatility)
-    return (c_n_f + slip + m_imp)
+    tc = (c_n_f + slip + m_imp)
+    return tc
 
 
 def size_of_trade(position_new, position_old, price_new, price_old) -> np.ndarray:
@@ -35,10 +36,12 @@ def size_of_trade(position_new, position_old, price_new, price_old) -> np.ndarra
     Returns:
         change_as_perc_of_port_val (float): the change in portfolio from time t-1 to t for each instrument. 
     """    
-    current_portolio_weights = position_old * (price_new/(price_old + float(np.finfo(np.float32).eps)))
-    portfolio_val_increase = np.sum((price_new/price_old), axis=1).reshape(-1, 1) / price_new.shape[-1]
-    required_rebalancing = position_new - current_portolio_weights/portfolio_val_increase
+    price_changes = ((price_new + float(np.finfo(np.float32).eps)) /(price_old + float(np.finfo(np.float32).eps))) 
+    current_portolio_weights = (position_old*((price_changes**np.sign(position_old))-1))+position_old
+    portfolio_val_increase = np.mean((np.absolute(position_old)*((price_changes**np.sign(position_old))-1)), axis=1).reshape(-1, 1) + 1
+    required_rebalancing = position_new - current_portolio_weights/(portfolio_val_increase + float(np.finfo(np.float32).eps))
     required_rebalancing = np.nan_to_num(abs(required_rebalancing))
+    required_rebalancing = np.clip(required_rebalancing, -2, 2)
     return required_rebalancing
 
 
@@ -53,6 +56,7 @@ def slippage(trade_size, volatility=0.01, mean_spread=0.001) -> np.ndarray:
     """ Change in bid/ask spread from alpha modeling to execution.
         Usually quadratic w.r.t trade size """
     slp = trade_size**2 * volatility * np.random.normal(0, mean_spread, trade_size.shape)
+    slp /= 100
     slp = np.nan_to_num(slp)
     return slp
 

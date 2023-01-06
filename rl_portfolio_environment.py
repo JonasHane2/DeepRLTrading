@@ -3,8 +3,8 @@ from transaction_cost_model import transaction_cost_model
 
 
 def asset_return(position_new, position_old, price_new, price_old, transaction_fraction=0.0002) -> float:
-    """ R_t = A_{t-1} * (p_t - p_{t-1}) - transaction costs """ 
-    return position_new * (price_new - price_old) - transaction_cost_model(position_new, position_old, price_new, price_old, transaction_fraction)[0]
+    """ R_t = A_{t-1} * log(p_t / p_{t-1}) - transaction costs """
+    return position_new * np.log((price_new + float(np.finfo(np.float32).eps))/(price_old + float(np.finfo(np.float32).eps))) - transaction_cost_model(position_new, position_old, price_new, price_old, transaction_fraction)[0]
 
 
 class PortfolioEnvironment():
