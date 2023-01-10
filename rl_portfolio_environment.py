@@ -4,8 +4,9 @@ from transaction_cost_model import transaction_cost_model
 
 class PortfolioEnvironment():
 
-    def __init__(self, states, num_instruments=1, transaction_fraction=0.002, num_prev_observations=10, reward_function_type='return') -> None:
+    def __init__(self, states, num_instruments=1, transaction_fraction=0.002, num_prev_observations=10, reward_function_type='return', transaction_cost=False) -> None:
         self.transaction_fraction = float(transaction_fraction)
+        self.transaction_cost = transaction_cost
         num_prev_observations = int(num_prev_observations)
         reward_functions = ['return', 'Sharpe', 'Sortino']
         if num_prev_observations < 1:
@@ -36,19 +37,23 @@ class PortfolioEnvironment():
 
     def reward_function(self, action) -> float: 
         """ Returns reward signal based on the environments chosen reward function. """
+        ret = asset_return(position_new=action, 
+                        position_old=self.position, 
+                        price_new=self.states[self.current_index][:self.num_instruments], 
+                        price_old=self.states[self.current_index-1][:self.num_instruments], 
+                        transaction_cost=self.transaction_cost)
         if self.reward_function_type == 'return':
-            ret = asset_return(action, self.position, self.states[self.current_index][:self.num_instruments], self.states[self.current_index-1][:self.num_instruments])
             return np.mean(ret)
         elif self.reward_function_type == 'Sharpe':
-            ret = asset_return(action, self.position, self.states[self.current_index][:self.num_instruments], self.states[self.current_index-1][:self.num_instruments])
-            if self.num_instruments  == 1: 
+            std = np.nan_to_num(np.std(ret))
+            if self.num_instruments  == 1 or std == 0: 
                 return np.mean(ret) 
-            return np.mean(ret)/(np.std(ret) + float(np.finfo(np.float32).eps))
+            return np.mean(ret)/(std + float(np.finfo(np.float32).eps))
         elif self.reward_function_type == 'Sortino':
-            ret = asset_return(action, self.position, self.states[self.current_index][:self.num_instruments], self.states[self.current_index-1][:self.num_instruments])
-            if self.num_instruments  == 1: 
+            std = np.nan_to_num(np.std(ret[ret<0]))
+            if self.num_instruments  == 1 or std == 0: 
                 return np.mean(ret) 
-            return np.mean(ret)/(np.std(ret[ret<0]) + float(np.finfo(np.float32).eps))            
+            return np.mean(ret)/(std + float(np.finfo(np.float32).eps))            
 
     def step(self, action):
         """
@@ -70,6 +75,7 @@ class PortfolioEnvironment():
         return self.state(), reward, False, {}
 
 
-def asset_return(position_new, position_old, price_new, price_old, transaction_fraction=0.0002) -> np.ndarray:
+def asset_return(position_new, position_old, price_new, price_old, transaction_fraction=0.0002, transaction_cost=True) -> np.ndarray:
     """ R_t = A_{t-1} * log(p_t / p_{t-1}) - transaction costs """
-    return position_new * np.log((price_new + float(np.finfo(np.float32).eps))/(price_old + float(np.finfo(np.float32).eps))) - transaction_cost_model(position_new, position_old, price_new, price_old, transaction_fraction)[0]
+    rtn = position_new * np.log((price_new + float(np.finfo(np.float32).eps))/(price_old + float(np.finfo(np.float32).eps)))
+    return rtn if not transaction_cost else (rtn - transaction_cost_model(position_new, position_old, price_new, price_old, transaction_fraction)[0])

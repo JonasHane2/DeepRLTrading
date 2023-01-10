@@ -39,11 +39,9 @@ def create_pyfolio_compatible_returns_history(prices: pd.DataFrame, positions: p
     portfolio_returns = percentage_returns(prices, positions)
     portfolio_returns = portfolio_returns.sum(axis=1)
     portfolio_returns = portfolio_returns.fillna(0)
-    portfolio_returns = portfolio_returns.divide(100)
 
     # Transaction costs as a % 
     tc = transaction_cost_history(prices, positions, transaction_fraction)
-    tc = tc.divide(100)
 
     # Net % returns
     portfolio_returns = portfolio_returns.subtract(np.append(tc.values, 0))
@@ -60,8 +58,8 @@ def positions_numpy_to_dataframe(positions: np.ndarray, prices: pd.DataFrame, la
 
 def get_baseline_returns_history(baseline_strat, prices: pd.DataFrame, scaled=False) -> pd.DataFrame:
     """ Gets the returns for a baseline strategy that is compatible with pyfolio """
-    baseline_long_only_portfolio = baseline_strat(prices, scaled=scaled) 
-    baseline_returns_history = create_pyfolio_compatible_returns_history(prices, baseline_long_only_portfolio)
+    baseline_portfolio = baseline_strat(prices, scaled=scaled) 
+    baseline_returns_history = create_pyfolio_compatible_returns_history(prices, baseline_portfolio)
     return baseline_returns_history
 
 
