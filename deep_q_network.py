@@ -14,7 +14,8 @@ criterion = torch.nn.MSELoss()
 def compute_loss_dqn(batch: tuple, net: torch.nn.Module, recurrent=False) -> torch.Tensor: 
     """ Return critic loss 1/N * (Q(s_t, a_t) - R)^2 for t = 0,1,...,N """
     state_batch, action_batch, reward_batch, _ = batch
-    reward_batch = ((reward_batch - reward_batch.mean()) / (reward_batch.std() + float(np.finfo(np.float32).eps))).to(device)
+    if len(reward_batch) > 1:
+        reward_batch = ((reward_batch - reward_batch.mean()) / (reward_batch.std() + float(np.finfo(np.float32).eps))).to(device)
     action_batch = action_batch.flatten().long().add(1) #add 1 because -1 actions before
     state_vals, _ = get_action_pobs(net=net, state=state_batch, recurrent=recurrent)
     state_action_vals = state_vals[range(action_batch.size(0)), action_batch]

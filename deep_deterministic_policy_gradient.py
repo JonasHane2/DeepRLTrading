@@ -9,9 +9,6 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 from batch_learning import ReplayMemory, Transition, get_batch
 from reinforce import optimize
 from action_selection import get_action_pobs
-#from DeepRLTrading.batch_learning import ReplayMemory, Transition, get_batch
-#from DeepRLTrading.reinforce import optimize
-#from DeepRLTrading.action_selection import get_action_pobs
 
 
 def update(replay_buffer: ReplayMemory, batch_size: int, critic: torch.nn.Module, actor: torch.nn.Module, optimizer_critic: torch.optim, optimizer_actor: torch.optim, processing, recurrent=False) -> None: 
@@ -41,7 +38,8 @@ def compute_actor_loss(actor, critic, state, processing, recurrent=False) -> tor
 def compute_critic_loss(critic, batch) -> torch.Tensor: 
     """ Returns error Q(s_t, a) - R_t+1 """
     state, action, reward, _ = batch
-    reward = ((reward - reward.mean()) / (reward.std() + float(np.finfo(np.float32).eps))).to(device) # does this actually improve performance here?
+    if len(reward) > 1:
+        reward = ((reward - reward.mean()) / (reward.std() + float(np.finfo(np.float32).eps))).to(device) # does this actually improve performance here?
     q_sa = critic(state.to(device), action.view(action.shape[0], -1).to(device)).squeeze().to(device)
     loss = torch.nn.MSELoss()(q_sa, reward)
     return loss

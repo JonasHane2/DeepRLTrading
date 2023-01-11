@@ -18,7 +18,8 @@ def optimize(optimizer: optim.Adam, loss: torch.Tensor) -> None:
 def get_policy_loss(rewards: list, log_probs: list) -> torch.Tensor:
     """ Return policy loss """
     r = torch.FloatTensor(rewards).to(device)
-    r = (r - r.mean()) / (r.std() + float(np.finfo(np.float32).eps))
+    if len(r) > 1:
+        r = (r - r.mean()) / (r.std() + float(np.finfo(np.float32).eps))
     log_probs = torch.stack(log_probs).squeeze().to(device)
     policy_loss = torch.mul(log_probs, r).mul(-1).sum().to(device)
     return policy_loss
@@ -96,7 +97,7 @@ def reinforce(policy_network: torch.nn.Module, env, act, alpha=1e-3, weight_deca
             log_probs.append(log_prob)
             exploration_rate = max(exploration_rate*exploration_decay, exploration_min)
 
-        if train:
+        if train and rewards != []:
             policy_loss = get_policy_loss(rewards, log_probs)
             optimize(optimizer, policy_loss)
 

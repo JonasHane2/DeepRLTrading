@@ -5,14 +5,14 @@ import torch
 torch.manual_seed(0)
 import torch.optim as optim
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-#device = "cpu"
 from reinforce import optimize
 criterion = torch.nn.MSELoss()
 
 def get_policy_and_value_loss(value_function, state_batch, reward_batch, log_probs):# -> tuple[torch.Tensor, torch.Tensor]:
     state_value = value_function(state_batch).squeeze().to(device)
     delta = reward_batch.to(device) - state_value.detach()
-    delta = (delta - delta.mean()) / (delta.std() + float(np.finfo(np.float32).eps))
+    if len(delta) > 1:
+        delta = (delta - delta.mean()) / (delta.std() + float(np.finfo(np.float32).eps))
     policy_loss = (-log_probs.to(device) * delta.to(device)).mean().to(device)
     vf_loss = criterion(state_value, reward_batch.to(device)).to(device)
     return policy_loss, vf_loss
@@ -90,7 +90,7 @@ def reinforce_baseline(policy_network: torch.nn.Module, value_function: torch.nn
             states.append(torch.from_numpy(state).float().unsqueeze(0).to(device))
             exploration_rate = max(exploration_rate*exploration_decay, exploration_min)
 
-        if train:
+        if train and rewards != []:
             reward_batch = torch.FloatTensor(rewards)
             state_batch = torch.cat(states)
             log_probs = torch.stack(log_probs).squeeze()
