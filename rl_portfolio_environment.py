@@ -32,8 +32,9 @@ class PortfolioEnvironment():
         return self.observations.flatten()
 
     def newest_observation(self) -> np.ndarray:
-        """ Returns the current position inserted into the current state array. """
-        return np.insert(self.states[self.current_index], len(self.states[self.current_index]), self.position)
+        return self.states[self.current_index]
+        #""" Returns the current position inserted into the current state array. """
+        #return np.insert(self.states[self.current_index], len(self.states[self.current_index]), self.position)
 
     def reward_function(self, action) -> float: 
         """ Returns reward signal based on the environments chosen reward function. """
