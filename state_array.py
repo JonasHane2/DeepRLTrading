@@ -27,19 +27,17 @@ def get_day_time_cycle_coordinates(timestamps) -> np.ndarray:
 
 
 def get_price_time_freq(df: pd.DataFrame, freq='1D') -> pd.Series:
-    """ Returns the quoted price at some freq, forward fills missing values 
-        it only gets the last observed price before that freq period,
-        otherwise the agent would get information that is not yet available """
-    price = df['Price'].resample(freq).last() # maybe mean()
-    price = price.fillna(method='ffill')
-    price.index = price.index.shift(1) # not sure if this is a good idea
+    """ Returns the last quoted price at some freq, removes missing values. 
+        e.g., for daily data it returns the last observed price that day 
+        and removes all days where there is no trading (weekends, holidays). 
+        Maybe change to first observed price. """
+    price = df['Price'].resample(freq).last().dropna() 
     return price
 
 
 def get_price_dataframe_bars(df: pd.DataFrame, idx: list) -> pd.Series:
     """ Finds the prices that are backwards closest to a list of indicies. """
-    price = df['Price']
-    lst = [price.loc[:id][-1] for id in idx]
+    lst = [df['Price'].loc[:id][-1] for id in idx]
     price = pd.Series(lst, index=idx)
     return price
 
@@ -47,8 +45,7 @@ def get_price_dataframe_bars(df: pd.DataFrame, idx: list) -> pd.Series:
 def get_log_return_dataframe(price: pd.Series, period=1, volatility_period=20) -> pd.DataFrame:
     """ Returns log returns at a specified period normalised by volatility adjusting. 
         TODO doesn't work when the price is zero, which has happened. """
-    returns = price.pct_change(period)
-    returns = returns.fillna(0)
+    returns = price.pct_change(period).fillna(0)
     returns = np.log(returns+1) 
     rolling_volatility = returns.rolling(volatility_period*period).std()
     returns = returns.divide(rolling_volatility*np.sqrt(period)*np.sqrt(volatility_period))
@@ -91,10 +88,10 @@ def normalize(series: np.ndarray, train_freq=1) -> np.ndarray:
 
 
 def get_volume_time_freq(df: pd.DataFrame, index: list, freq="1D") -> pd.Series:
-    """ Returns the total trade volume for some instrument at some frequency """
-    volume = df['Volume'].resample(freq).sum()
-    volume.index = volume.index.shift(1)
-    volume = volume.loc[volume.index.intersection(index)] 
+    """ Returns the total trade volume for some instrument at some frequency. 
+        Only keeps the observations that fall in the index list. """
+    volume = df['Volume'].resample(freq).sum().fillna(0)
+    volume = volume.loc[volume.index.intersection(index)]
     return volume
 
 
@@ -107,7 +104,7 @@ def get_volume_dataframe_bars(df: pd.DataFrame, idx: list) -> pd.Series:
     return volume
 
 
-def get_instrument_features(price: pd.Series, volume: pd.Series, returns_lag=[1,7,30], train_freq=1): 
+def get_instrument_features(price: pd.Series, volume: pd.Series, returns_lag=[1,5,20], train_freq=1): 
     """ 
     Args: 
         prices (pd.Series):         the price series for one instrument.
@@ -129,8 +126,12 @@ def get_instrument_features(price: pd.Series, volume: pd.Series, returns_lag=[1,
     return norm_price, norm_volume, *log_returns, rsi, macd
 
 
-def get_state_features(prices: pd.DataFrame, volumes: pd.DataFrame, returns_lag=[1,7,30], train_freq=1) -> np.ndarray:
+def get_state_features(prices: pd.DataFrame, volumes: pd.DataFrame, returns_lag=[1,5,20], train_freq=1) -> np.ndarray:
     """ 
+    Get instruments features for all instruments (the 0th element is the label, while the 1st is values).
+    Create the state feature and reshape it to fit the shape of an RL state array. 
+    Get the year, week, and day coordinates and insert them into the sate array with correct shape. 
+
     Args: 
         prices (pd.DataFrame):  the price series for one or more instruments. 
         volume (pd.DataFrame):  the volume series for one or more instruments, indexed idetically to the first argument.
@@ -162,7 +163,7 @@ def add_riskfree_asset(prices: pd.DataFrame, volumes: pd.DataFrame):
     return prices, volumes
 
 
-def get_state_and_non_norm_price(prices: list, volumes: list, idx: list, labels: list, returns_lag=[1,7,30], riskfree_asset=False, train_freq=1): 
+def get_state_and_non_norm_price(prices: list, volumes: list, idx: list, labels: list, returns_lag=[1,5,20], riskfree_asset=False, train_freq=1): 
     """ Creates the price and volume dataframe, adds riskfree asset if specified, and gets the state array. """
     non_norm_prices = pd.DataFrame(list(map(list, zip(*prices))), index=idx).set_axis(labels, axis=1, inplace=False)
     non_norm_prices.index = non_norm_prices.index.tz_localize('utc')
@@ -173,8 +174,15 @@ def get_state_and_non_norm_price(prices: list, volumes: list, idx: list, labels:
     return states, non_norm_prices
 
 
-def get_state_array_time_freq(dfs: list, labels: list, freq="1D", returns_lag=[1,7,30], riskfree_asset=False, train_freq=1): 
+def get_state_array_time_freq(dfs: list, labels: list, freq="1D", returns_lag=[1,5,20], riskfree_asset=False, train_freq=1): 
     """
+    Sets index to datetime for all dataframes. 
+    Finds the price at specific intervals. 
+    Finds the intersection of the observations indices of all dataframes and sorts the list. 
+    Finds the prices for all instruments at these indices. 
+    Finds the trade volume between these observations. 
+    Returns the state array and price series. 
+
     Args:
         dfs (list):                 a list of dataframes that consists of trade information of different instruments.
                                     Each dataframe must have a column 'DateTime', 'Price', and 'Volume'. 
@@ -189,8 +197,8 @@ def get_state_array_time_freq(dfs: list, labels: list, freq="1D", returns_lag=[1
         non_norm_prices (DataFrame): a dataframe consisting of the non normalized prices of every
                                     instrument in the state array (including the riskfree asset if used). 
     """
-    dfs = [d.set_index('DateTime') for d in dfs]
-    prices = [get_price_time_freq(d, freq) for d in dfs]
+    dfs = [d.set_index('DateTime') for d in dfs] 
+    prices = [get_price_time_freq(d, freq) for d in dfs] 
     indices = [d.index for d in prices]
     index_intersection = list(set(indices[0]).intersection(*indices))
     index_intersection.sort() 
@@ -199,7 +207,7 @@ def get_state_array_time_freq(dfs: list, labels: list, freq="1D", returns_lag=[1
     return get_state_and_non_norm_price(prices_intersection, volumes, index_intersection, labels, returns_lag, riskfree_asset, train_freq=train_freq)
 
 
-def get_state_array_bars(dfs: list, labels: list, bar_type='tick', avg_bars_per_day=1, returns_lag=[1,7,30], riskfree_asset=False, imbalance_bars=False, train_freq=1): 
+def get_state_array_bars(dfs: list, labels: list, bar_type='tick', avg_bars_per_day=1, returns_lag=[1,5,20], riskfree_asset=False, imbalance_bars=False, train_freq=1): 
     """
     Args:
         dfs (list):                 a list of dataframes that consists of trade information of different instruments.
