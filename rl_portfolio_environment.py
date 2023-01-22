@@ -5,19 +5,17 @@ from transaction_cost_model import transaction_cost_model
 class PortfolioEnvironment():
 
     def __init__(self, states, num_instruments=1, transaction_fraction=0.002, num_prev_observations=10, reward_function_type='return', transaction_cost=False) -> None:
-        self.transaction_fraction = float(transaction_fraction)
-        self.transaction_cost = transaction_cost
-        num_prev_observations = int(num_prev_observations)
         reward_functions = ['return', 'Sharpe', 'Sortino']
-        if num_prev_observations < 1:
-            raise ValueError("Argument num_prev_observations must be integer >= 1, and not {}".format(num_prev_observations))
         if reward_function_type not in reward_functions:
             raise ValueError("Argument reward_function must be one of {}".format(reward_functions))
         self.reward_function_type = reward_function_type
+        self.transaction_fraction = max(float(transaction_fraction), 0)
+        self.transaction_cost = transaction_cost        
         self.num_instruments = num_instruments
         self.states = states
         self.current_index = 0
         self.position = np.zeros((num_instruments,))
+        num_prev_observations = max(int(num_prev_observations), 1)
         self.observations = np.array([self.newest_observation() for _ in range(num_prev_observations)]) 
 
     def reset(self) -> np.ndarray:
@@ -79,4 +77,6 @@ class PortfolioEnvironment():
 def asset_return(position_new, position_old, price_new, price_old, transaction_fraction=0.0002, transaction_cost=True) -> np.ndarray:
     """ R_t = A_{t-1} * log(p_t / p_{t-1}) - transaction costs """
     rtn = position_new * np.log((price_new + float(np.finfo(np.float32).eps))/(price_old + float(np.finfo(np.float32).eps)))
-    return rtn if not transaction_cost else (rtn - transaction_cost_model(position_new, position_old, price_new, price_old, transaction_fraction)[0])
+    if transaction_cost: 
+        rtn -= transaction_cost_model(position_new, position_old, price_new, price_old, transaction_fraction)[0]
+    return rtn

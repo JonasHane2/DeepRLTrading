@@ -1,17 +1,21 @@
-import sys, os
+import sys
+import os
 sys.path.append(os.path.join(os.path.dirname(__file__))) # for relative imports
 import numpy as np
 import torch
-torch.manual_seed(0)
 import torch.optim as optim
 import torch.nn as nn
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 from batch_learning import ReplayMemory, Transition, get_batch
 from reinforce import optimize
 from action_selection import get_action_pobs
+torch.manual_seed(0)
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 
-def update(replay_buffer: ReplayMemory, batch_size: int, critic: torch.nn.Module, actor: torch.nn.Module, optimizer_critic: torch.optim, optimizer_actor: torch.optim, processing, recurrent=False) -> None: 
+def update(replay_buffer: ReplayMemory, batch_size: int, 
+           critic: torch.nn.Module, actor: torch.nn.Module, 
+           optimizer_critic: torch.optim, optimizer_actor: torch.optim, 
+           processing, recurrent=False) -> None: 
     """ Get batch, get loss and optimize critic, freeze q net, get loss and optimize actor, unfreeze q net """
     batch = get_batch(replay_buffer, batch_size)
     if batch is None:
@@ -44,8 +48,14 @@ def compute_critic_loss(critic, batch) -> torch.Tensor:
     loss = torch.nn.MSELoss()(q_sa, reward)
     return loss
 
-
-def deep_determinstic_policy_gradient(actor_net: nn.Module, critic_net: nn.Module, env, act, processing, alpha_actor=1e-3, alpha_critic=1e-3, weight_decay=1e-4, batch_size=30, update_freq=1, exploration_rate=1, exploration_decay=(1-1e-3), exploration_min=0, num_episodes=1000, max_episode_length=np.iinfo(np.int32).max, train=True, print_res=True, print_freq=100, recurrent=False, replay_buffer_size=1000, early_stopping=False, early_stopping_freq=100, val_env=None):# -> tuple[np.ndarray, np.ndarray]: 
+def deep_determinstic_policy_gradient(
+        actor_net: nn.Module, critic_net: nn.Module, env, act, processing, 
+        alpha_actor=1e-3, alpha_critic=1e-3, weight_decay=1e-4, batch_size=30, 
+        update_freq=1, exploration_rate=1, exploration_decay=(1-1e-3), 
+        exploration_min=0, num_episodes=1000, max_episode_length=np.iinfo(np.int32).max, 
+        train=True, print_res=True, print_freq=100, recurrent=False, 
+        replay_buffer_size=1000, early_stopping=False, early_stopping_freq=100, val_env=None
+    ):
     """
     Deep Deterministic Policy Gradient
 
@@ -118,9 +128,9 @@ def deep_determinstic_policy_gradient(actor_net: nn.Module, critic_net: nn.Modul
             actions.append(action)
             rewards.append(reward)
             replay_buffer.push(torch.from_numpy(state).float().unsqueeze(0).to(device), 
-                            torch.FloatTensor(np.array([action])), 
-                            torch.FloatTensor([reward]), 
-                            torch.from_numpy(next_state).float().unsqueeze(0).to(device))
+                               torch.FloatTensor(np.array([action])), 
+                               torch.FloatTensor([reward]), 
+                               torch.from_numpy(next_state).float().unsqueeze(0).to(device))
 
             if train and len(replay_buffer) >= batch_size and (i+1) % update_freq == 0:
                 update(replay_buffer, batch_size, critic_net, actor_net, optimizer_critic, optimizer_actor, processing, recurrent)    
@@ -148,7 +158,17 @@ def deep_determinstic_policy_gradient(actor_net: nn.Module, critic_net: nn.Modul
             print()
         
         if done and early_stopping and completed_episodes_counter % early_stopping_freq == 0:
-            val_reward, _ = deep_determinstic_policy_gradient(actor_net, critic_net, val_env, act, processing, train=False, num_episodes=1, print_res=False, recurrent=recurrent, exploration_rate=0, exploration_min=0)
+            val_reward, _ = deep_determinstic_policy_gradient(actor_net, 
+                                                              critic_net, 
+                                                              val_env, 
+                                                              act, 
+                                                              processing, 
+                                                              train=False, 
+                                                              num_episodes=1, 
+                                                              print_res=False, 
+                                                              recurrent=recurrent, 
+                                                              exploration_rate=0, 
+                                                              exploration_min=0)
             if len(validation_rewards) > 0 and val_reward[0] < validation_rewards[-1]:
                 return np.array(reward_history), np.array(action_history)
             validation_rewards.append(val_reward)

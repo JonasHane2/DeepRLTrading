@@ -2,11 +2,11 @@ import sys, os
 sys.path.append(os.path.join(os.path.dirname(__file__))) # for relative imports
 import numpy as np
 import torch
-torch.manual_seed(0)
 import torch.optim as optim
 from batch_learning import ReplayMemory, Transition, get_batch
 from action_selection import get_action_pobs
 from reinforce import optimize
+torch.manual_seed(0)
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 criterion = torch.nn.MSELoss()
 
@@ -31,7 +31,12 @@ def update(replay_buffer: ReplayMemory, batch_size: int, net: torch.nn.Module, o
     optimize(optimizer, loss)
 
 
-def deep_q_network(q_net, env, act, alpha=1e-4, weight_decay=1e-5, batch_size=10, exploration_rate=1, exploration_decay=(1-1e-3), exploration_min=0, num_episodes=1000, max_episode_length=np.iinfo(np.int32).max, train=True, print_res=True, print_freq=100, recurrent=False, replay_buffer_size=1000, early_stopping=False, early_stopping_freq=100, val_env=None):# -> tuple[np.ndarray, np.ndarray]: 
+def deep_q_network(q_net, env, act, alpha=1e-4, weight_decay=1e-5, batch_size=10, 
+                   exploration_rate=1, exploration_decay=(1-1e-3), exploration_min=0, 
+                   num_episodes=1000, max_episode_length=np.iinfo(np.int32).max, 
+                   train=True, print_res=True, print_freq=100, recurrent=False, 
+                   replay_buffer_size=1000, early_stopping=False, 
+                   early_stopping_freq=100, val_env=None):
     """
     Deep Q Network 
 
@@ -63,7 +68,9 @@ def deep_q_network(q_net, env, act, alpha=1e-4, weight_decay=1e-5, batch_size=10
         reward_history (np.ndarray): the sum of rewards for all completed episodes.
         action_history (np.ndarray): the array of all actions of all completed episodes.       
     """
-    optimizer = optim.Adam(q_net.parameters(), lr=alpha, weight_decay=weight_decay)
+    optimizer = optim.Adam(q_net.parameters(), 
+                           lr=alpha, 
+                           weight_decay=weight_decay)
     replay_buffer = ReplayMemory(replay_buffer_size)
     reward_history = []
     action_history = []
@@ -97,9 +104,9 @@ def deep_q_network(q_net, env, act, alpha=1e-4, weight_decay=1e-5, batch_size=10
             actions.append(action)
             rewards.append(reward)
             replay_buffer.push(torch.from_numpy(state).float().unsqueeze(0).to(device), 
-                            torch.FloatTensor(np.array([action])), 
-                            torch.FloatTensor([reward]), 
-                            torch.from_numpy(next_state).float().unsqueeze(0).to(device))
+                               torch.FloatTensor(np.array([action])), 
+                               torch.FloatTensor([reward]), 
+                               torch.from_numpy(next_state).float().unsqueeze(0).to(device))
 
             if train and len(replay_buffer) >= batch_size:
                 update(replay_buffer, batch_size, q_net, optimizer, recurrent)
@@ -127,7 +134,15 @@ def deep_q_network(q_net, env, act, alpha=1e-4, weight_decay=1e-5, batch_size=10
             print()
         
         if done and early_stopping and completed_episodes_counter % early_stopping_freq == 0:
-            val_reward, _ = deep_q_network(q_net, val_env, act, train=False, num_episodes=1, print_res=False, recurrent=recurrent, exploration_rate=0, exploration_min=0)
+            val_reward, _ = deep_q_network(q_net, 
+                                           val_env, 
+                                           act, 
+                                           train=False, 
+                                           num_episodes=1, 
+                                           print_res=False, 
+                                           recurrent=recurrent, 
+                                           exploration_rate=0, 
+                                           exploration_min=0)
             if len(validation_rewards) > 0 and val_reward[0] < validation_rewards[-1]:
                 return np.array(reward_history), np.array(action_history)
             validation_rewards.append(val_reward)
