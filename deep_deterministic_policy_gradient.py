@@ -26,12 +26,15 @@ def update(replay_buffer: ReplayMemory, batch_size: int,
            critic: torch.nn.Module, actor: torch.nn.Module, 
            critic_target: torch.nn.Module, actor_target: torch.nn.Module,
            optimizer_critic: torch.optim, optimizer_actor: torch.optim, 
-           processing, discount_factor, recurrent=False) -> None: 
+           processing, discount_factor, act, recurrent=False) -> None: 
     """ Get batch, get loss and optimize critic, freeze q net, get loss and optimize actor, unfreeze q net """
     batch = get_batch(replay_buffer, batch_size)
     if batch is None:
         return
-    c_loss = compute_critic_loss(critic, batch, actor_target, critic_target, discount_factor)
+    if discount_factor == -1: #TODO change:
+        c_loss = cumpute_critic_loss_alternative(critic, batch, actor_target, processing, recurrent)
+    else:
+        c_loss = compute_critic_loss(critic, batch, actor_target, critic_target, processing, recurrent, discount_factor)
     optimize(optimizer_critic, c_loss)
     for p in critic.parameters(): # Freeze Q-net
         p.requires_grad = False
@@ -50,16 +53,40 @@ def compute_actor_loss(actor, critic, state, processing, recurrent=False) -> tor
     return loss
 
 
-def compute_critic_loss(critic, batch, actor_target, critic_target, discount_factor=0) -> torch.Tensor: 
+def cumpute_critic_loss_alternative(critic, batch, actor_target, processing, recurrent) -> torch.Tensor: 
+    """ Idea for alternative loss where only the transaction costs of the next action is considered """
+    state, action, reward, next_state = batch
+    if len(reward) > 1:
+        reward = ((reward - reward.mean()) / (reward.std() + float(np.finfo(np.float32).eps))).to(device) # does this actually improve performance here?
+    with torch.no_grad():
+        if recurrent:
+            a_hat, _ = actor_target(next_state)
+        else: 
+            a_hat = actor_target(next_state) 
+        a_hat = processing(a_hat).to(device)
+    q_sa = critic(state.to(device), action.view(action.shape[0], -1).to(device)).squeeze().to(device)
+    tc =  np.abs(action - a_hat)
+    tc = torch.sum(tc, dim=1)
+    tc *= 0.002 #TODO change
+    target = reward - tc
+    loss = torch.nn.MSELoss()(q_sa, target)
+    return loss
+
+
+def compute_critic_loss(critic, batch, actor_target, critic_target, processing, recurrent, discount_factor=0) -> torch.Tensor: 
     """ Returns error Q(s_t, a) - (R_t+1 + Q(S_t+1, mu(s_t+1))) """
     state, action, reward, next_state = batch
     if len(reward) > 1:
         reward = ((reward - reward.mean()) / (reward.std() + float(np.finfo(np.float32).eps))).to(device) # does this actually improve performance here?
     with torch.no_grad():
-        a_hat = actor_target(next_state)
+        if recurrent:
+            a_hat, _ = actor_target(next_state)
+        else: 
+            a_hat = actor_target(next_state) 
+        a_hat = processing(a_hat).to(device)
         q_sa_hat = critic_target(next_state, a_hat).squeeze()
     q_sa = critic(state.to(device), action.view(action.shape[0], -1).to(device)).squeeze().to(device)
-    target = reward + discount_factor * q_sa_hat 
+    target = reward + discount_factor * q_sa_hat
     loss = torch.nn.MSELoss()(q_sa, target)
     return loss
 
@@ -86,6 +113,8 @@ def deep_determinstic_policy_gradient(
              then transforms that output to a problem-dependent action.
         processing: a function that is used to process actions when calculating actor loss. 
                     It is the same processing that is used in the act function. 
+        discount_factor (float): rate of discounting future rewards on interval [0,1]
+        tau (float): learning rate for target networks on the interval [0,1]
         alpha_actor (float): the learning rate on the interval [0,1] for the actor network.
         alpha_critic (float): the learning rate on the interval [0,1] for the critic network.
         weight_decay (float): regularization parameter for the actor and critic networks.
@@ -163,6 +192,7 @@ def deep_determinstic_policy_gradient(
                        optimizer_actor=optimizer_actor,
                        processing=processing,
                        discount_factor=discount_factor,
+                       act=act,
                        recurrent=recurrent)    
             
             soft_updates(critic_net, critic_target_net, tau)
