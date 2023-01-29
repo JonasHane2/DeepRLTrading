@@ -1,6 +1,7 @@
 import sys
 import os
 sys.path.append(os.path.join(os.path.dirname(__file__))) # for relative imports
+from copy import deepcopy
 import numpy as np
 import torch
 import torch.optim as optim
@@ -12,15 +13,25 @@ torch.manual_seed(0)
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 
+def soft_updates(net: torch.nn.Module, target_net: torch.nn.Module, tau: float):
+    """ Ø' <- tØ' + (1-t)Ø """
+    tau = min(1, max(0, tau))
+    with torch.no_grad():
+        for p, p_targ in zip(net.parameters(), target_net.parameters()):
+            p_targ.data.mul_(tau)
+            p_targ.data.add_((1 - tau) * p.data)
+
+
 def update(replay_buffer: ReplayMemory, batch_size: int, 
            critic: torch.nn.Module, actor: torch.nn.Module, 
+           critic_target: torch.nn.Module, actor_target: torch.nn.Module,
            optimizer_critic: torch.optim, optimizer_actor: torch.optim, 
-           processing, recurrent=False) -> None: 
+           processing, discount_factor, recurrent=False) -> None: 
     """ Get batch, get loss and optimize critic, freeze q net, get loss and optimize actor, unfreeze q net """
     batch = get_batch(replay_buffer, batch_size)
     if batch is None:
         return
-    c_loss = compute_critic_loss(critic, batch)
+    c_loss = compute_critic_loss(critic, batch, actor_target, critic_target, discount_factor)
     optimize(optimizer_critic, c_loss)
     for p in critic.parameters(): # Freeze Q-net
         p.requires_grad = False
@@ -39,17 +50,23 @@ def compute_actor_loss(actor, critic, state, processing, recurrent=False) -> tor
     return loss
 
 
-def compute_critic_loss(critic, batch) -> torch.Tensor: 
-    """ Returns error Q(s_t, a) - R_t+1 """
-    state, action, reward, _ = batch
+def compute_critic_loss(critic, batch, actor_target, critic_target, discount_factor=0) -> torch.Tensor: 
+    """ Returns error Q(s_t, a) - (R_t+1 + Q(S_t+1, mu(s_t+1))) """
+    state, action, reward, next_state = batch
     if len(reward) > 1:
         reward = ((reward - reward.mean()) / (reward.std() + float(np.finfo(np.float32).eps))).to(device) # does this actually improve performance here?
+    with torch.no_grad():
+        a_hat = actor_target(next_state)
+        q_sa_hat = critic_target(next_state, a_hat).squeeze()
     q_sa = critic(state.to(device), action.view(action.shape[0], -1).to(device)).squeeze().to(device)
-    loss = torch.nn.MSELoss()(q_sa, reward)
+    target = reward + discount_factor * q_sa_hat 
+    loss = torch.nn.MSELoss()(q_sa, target)
     return loss
+
 
 def deep_determinstic_policy_gradient(
         actor_net: nn.Module, critic_net: nn.Module, env, act, processing, 
+        discount_factor=0, tau=0.2,
         alpha_actor=1e-3, alpha_critic=1e-3, weight_decay=1e-4, batch_size=30, 
         update_freq=1, exploration_rate=1, exploration_decay=(1-1e-3), 
         exploration_min=0, num_episodes=1000, max_episode_length=np.iinfo(np.int32).max, 
@@ -113,7 +130,10 @@ def deep_determinstic_policy_gradient(
     else:
         actor_net.train()
         critic_net.train()
-        
+    
+    actor_target_net = deepcopy(actor_net)
+    critic_target_net = deepcopy(critic_net)
+
     for n in range(num_episodes):
         rewards = []
         actions = []
@@ -133,8 +153,20 @@ def deep_determinstic_policy_gradient(
                                torch.from_numpy(next_state).float().unsqueeze(0).to(device))
 
             if train and len(replay_buffer) >= batch_size and (i+1) % update_freq == 0:
-                update(replay_buffer, batch_size, critic_net, actor_net, optimizer_critic, optimizer_actor, processing, recurrent)    
+                update(replay_buffer=replay_buffer, 
+                       batch_size=batch_size,
+                       critic=critic_net,
+                       actor=actor_net,
+                       critic_target=critic_target_net,
+                       actor_target=actor_target_net,
+                       optimizer_critic=optimizer_critic,
+                       optimizer_actor=optimizer_actor,
+                       processing=processing,
+                       discount_factor=discount_factor,
+                       recurrent=recurrent)    
             
+            soft_updates(critic_net, critic_target_net, tau)
+            soft_updates(actor_net, actor_target_net, tau)
             state = next_state
             exploration_rate = max(exploration_rate*exploration_decay, exploration_min)
 

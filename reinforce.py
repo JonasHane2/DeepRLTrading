@@ -1,6 +1,7 @@
 #Pay attention to possible exploding gradient for certain hyperparameters
 #torch.nn.utils.clip_grad_norm_(net.parameters(), 1) 
 #Maybe implement a safety mechanism that clips gradients 
+from itertools import accumulate
 import numpy as np
 import torch
 import torch.optim as optim
@@ -26,6 +27,7 @@ def get_policy_loss(rewards: list, log_probs: list) -> torch.Tensor:
 
 
 def reinforce(policy_network: torch.nn.Module, env, act, alpha=1e-3, 
+              discount_factor=0,
               weight_decay=1e-5, exploration_rate=1, exploration_decay=(1-1e-4), 
               exploration_min=0, num_episodes=1000, 
               max_episode_length=np.iinfo(np.int32).max, train=True, 
@@ -103,7 +105,8 @@ def reinforce(policy_network: torch.nn.Module, env, act, alpha=1e-3,
             exploration_rate = max(exploration_rate*exploration_decay, exploration_min)
 
         if train and rewards != []:
-            policy_loss = get_policy_loss(rewards, log_probs)
+            weighted_rewards = list(accumulate(reversed(rewards), lambda x,y: x*discount_factor + y))[::-1]
+            policy_loss = get_policy_loss(weighted_rewards, log_probs)
             optimize(optimizer, policy_loss)
 
         total_rewards.extend(rewards)
