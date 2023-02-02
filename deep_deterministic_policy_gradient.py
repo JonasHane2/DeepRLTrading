@@ -26,13 +26,13 @@ def update(replay_buffer: ReplayMemory, batch_size: int,
            critic: torch.nn.Module, actor: torch.nn.Module, 
            critic_target: torch.nn.Module, actor_target: torch.nn.Module,
            optimizer_critic: torch.optim, optimizer_actor: torch.optim, 
-           processing, discount_factor, act, recurrent=False) -> None: 
+           processing, discount_factor, recurrent=False) -> None: 
     """ Get batch, get loss and optimize critic, freeze q net, get loss and optimize actor, unfreeze q net """
     batch = get_batch(replay_buffer, batch_size)
     if batch is None:
         return
-    if discount_factor == -1: #TODO change:
-        c_loss = cumpute_critic_loss_alternative(critic, batch, actor_target, processing, recurrent)
+    if discount_factor <= 0: 
+        c_loss = cumpute_critic_loss_alternative(critic, batch)
     else:
         c_loss = compute_critic_loss(critic, batch, actor_target, critic_target, processing, recurrent, discount_factor)
     optimize(optimizer_critic, c_loss)
@@ -53,23 +53,13 @@ def compute_actor_loss(actor, critic, state, processing, recurrent=False) -> tor
     return loss
 
 
-def cumpute_critic_loss_alternative(critic, batch, actor_target, processing, recurrent) -> torch.Tensor: 
-    """ Idea for alternative loss where only the transaction costs of the next action is considered """
-    state, action, reward, next_state = batch
+def cumpute_critic_loss_alternative(critic, batch) -> torch.Tensor: 
+    """ Returns error Q(s_t, a) - R_t+1 """
+    state, action, reward, _ = batch
     if len(reward) > 1:
-        reward = ((reward - reward.mean()) / (reward.std() + float(np.finfo(np.float32).eps))).to(device) # does this actually improve performance here?
-    with torch.no_grad():
-        if recurrent:
-            a_hat, _ = actor_target(next_state)
-        else: 
-            a_hat = actor_target(next_state) 
-        a_hat = processing(a_hat).to(device)
+        reward = ((reward - reward.mean()) / (reward.std() + float(np.finfo(np.float32).eps))).to(device)
     q_sa = critic(state.to(device), action.view(action.shape[0], -1).to(device)).squeeze().to(device)
-    tc =  np.abs(action - a_hat)
-    tc = torch.sum(tc, dim=1)
-    tc *= 0.002 #TODO change
-    target = reward - tc
-    loss = torch.nn.MSELoss()(q_sa, target)
+    loss = torch.nn.MSELoss()(q_sa, reward)
     return loss
 
 
@@ -192,11 +182,11 @@ def deep_determinstic_policy_gradient(
                        optimizer_actor=optimizer_actor,
                        processing=processing,
                        discount_factor=discount_factor,
-                       act=act,
                        recurrent=recurrent)    
             
-            soft_updates(critic_net, critic_target_net, tau)
-            soft_updates(actor_net, actor_target_net, tau)
+            if discount_factor > 0:
+                soft_updates(critic_net, critic_target_net, tau)
+                soft_updates(actor_net, actor_target_net, tau)
             state = next_state
             exploration_rate = max(exploration_rate*exploration_decay, exploration_min)
 
