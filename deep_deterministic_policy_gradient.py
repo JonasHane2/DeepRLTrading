@@ -11,7 +11,8 @@ from reinforce import optimize
 from action_selection import get_action_pobs
 torch.manual_seed(0)
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-
+#criterion = torch.nn.MSELoss()
+criterion = torch.nn.HuberLoss()
 
 def soft_updates(net: torch.nn.Module, target_net: torch.nn.Module, tau: float):
     """ Ø' <- tØ' + (1-t)Ø """
@@ -56,10 +57,10 @@ def compute_actor_loss(actor, critic, state, processing, recurrent=False) -> tor
 def cumpute_critic_loss_alternative(critic, batch) -> torch.Tensor: 
     """ Returns error Q(s_t, a) - R_t+1 """
     state, action, reward, _ = batch
+    q_sa = critic(state.to(device), action.view(action.shape[0], -1).to(device)).squeeze().to(device)
     if len(reward) > 1:
         reward = ((reward - reward.mean()) / (reward.std() + float(np.finfo(np.float32).eps))).to(device)
-    q_sa = critic(state.to(device), action.view(action.shape[0], -1).to(device)).squeeze().to(device)
-    loss = torch.nn.MSELoss()(q_sa, reward)
+    loss = criterion(q_sa, reward)
     return loss
 
 
@@ -77,7 +78,7 @@ def compute_critic_loss(critic, batch, actor_target, critic_target, processing, 
         q_sa_hat = critic_target(next_state, a_hat).squeeze()
     q_sa = critic(state.to(device), action.view(action.shape[0], -1).to(device)).squeeze().to(device)
     target = reward + discount_factor * q_sa_hat
-    loss = torch.nn.MSELoss()(q_sa, target)
+    loss = criterion(q_sa, target)
     return loss
 
 
