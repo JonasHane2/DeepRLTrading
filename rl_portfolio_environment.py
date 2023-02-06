@@ -4,13 +4,14 @@ from transaction_cost_model import transaction_cost_model
 
 class PortfolioEnvironment():
 
-    def __init__(self, states, num_instruments=1, transaction_fraction=0.002, num_prev_observations=10, reward_function_type='return', transaction_cost=False) -> None:
+    def __init__(self, states, num_instruments=1, transaction_fraction=0.002, num_prev_observations=10, reward_function_type='return', transaction_cost=False, add_prev_position=False) -> None:
         reward_functions = ['return', 'Sharpe', 'Sortino']
         if reward_function_type not in reward_functions:
             raise ValueError("Argument reward_function must be one of {}".format(reward_functions))
         self.reward_function_type = reward_function_type
         self.transaction_fraction = max(float(transaction_fraction), 0)
         self.transaction_cost = transaction_cost        
+        self.add_prev_position = add_prev_position
         self.num_instruments = num_instruments
         self.states = states
         self.current_index = 0
@@ -30,9 +31,12 @@ class PortfolioEnvironment():
         return self.observations.flatten()
 
     def newest_observation(self) -> np.ndarray:
-        return self.states[self.current_index]
-        #""" Returns the current position inserted into the current state array. """
-        #return np.insert(self.states[self.current_index], len(self.states[self.current_index]), self.position)
+        """ Returns the current position inserted into the current state array, if specified. 
+            Else returns the current state array. """
+        if self.add_prev_position: 
+            return np.insert(self.states[self.current_index], len(self.states[self.current_index]), self.position)
+        else:
+            return self.states[self.current_index]
 
     def reward_function(self, action) -> float: 
         """ Returns reward signal based on the environments chosen reward function. """

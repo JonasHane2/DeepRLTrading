@@ -16,10 +16,10 @@ def optimize(optimizer: optim.Adam, loss: torch.Tensor) -> None:
     optimizer.step()
 
 
-def get_policy_loss(rewards: list, log_probs: list) -> torch.Tensor:
+def get_policy_loss(rewards: list, log_probs: list, normalize=True) -> torch.Tensor:
     """ Return policy loss """
     r = torch.FloatTensor(rewards).to(device)
-    if len(r) > 1:
+    if len(r) > 1 and normalize:
         r = (r - r.mean()) / (r.std() + float(np.finfo(np.float32).eps))
     log_probs = torch.stack(log_probs).squeeze().to(device)
     policy_loss = torch.mul(log_probs, r).mul(-1).sum().to(device)
@@ -27,7 +27,7 @@ def get_policy_loss(rewards: list, log_probs: list) -> torch.Tensor:
 
 
 def reinforce(policy_network: torch.nn.Module, env, act, alpha=1e-3, 
-              discount_factor=0,
+              discount_factor=0, normalize_rewards=True,
               weight_decay=1e-5, exploration_rate=1, exploration_decay=(1-1e-4), 
               exploration_min=0, num_episodes=1000, 
               max_episode_length=np.iinfo(np.int32).max, train=True, 
@@ -106,7 +106,7 @@ def reinforce(policy_network: torch.nn.Module, env, act, alpha=1e-3,
 
         if train and rewards != []:
             weighted_rewards = list(accumulate(reversed(rewards), lambda x,y: x*discount_factor + y))[::-1]
-            policy_loss = get_policy_loss(weighted_rewards, log_probs)
+            policy_loss = get_policy_loss(weighted_rewards, log_probs, normalize_rewards)
             optimize(optimizer, policy_loss)
 
         total_rewards.extend(rewards)
