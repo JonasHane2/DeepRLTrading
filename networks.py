@@ -6,12 +6,20 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 #nn_activation_function = nn.ReLU()
 nn_activation_function = nn.LeakyReLU()
 #nn_activation_function = nn.ELU()
+out_layer_std = 3e-3
 
 
+"""
 def fanin_init(size, fanin=None):
 	fanin = fanin or size[0]
 	v = 1. / np.sqrt(fanin)
 	return torch.Tensor(size).uniform_(-v, v)
+def weights_init(m):
+    if isinstance(m, nn.Linear):
+        torch.nn.init.kaiming_normal_(m.weight)
+        m.bias.data.fill_(0.01)
+"""
+
 
 def _get_seq_out(seq, shape) -> int:
     """ Returns the output dimension of a convolutional sequence. """
@@ -43,6 +51,7 @@ class AConvLSTMDiscrete(nn.Module): #DRQN
         conv_out = _get_seq_out(self.conv, hidden_size)
         self.lstm_layer = nn.LSTM(input_size=conv_out, hidden_size=hidden_size, num_layers=num_lstm_layers, batch_first=True, dropout=dropout)
         self.fc_out = nn.Linear(hidden_size, action_space)
+        self.fc_out.weight.data.normal_(0, out_layer_std)
 
     def forward(self, x, hx=None):
         x = self.fc_in(x)
@@ -80,6 +89,7 @@ class AConvDiscrete(nn.Module): #DQN
         )
         conv_out = _get_seq_out(self.conv, hidden_size)
         self.fc_out = nn.Linear(conv_out, action_space)
+        self.fc_out.weight.data.normal_(0, out_layer_std)
 
     def forward(self, x) -> torch.Tensor:
         x = self.fc_in(x)
@@ -102,6 +112,7 @@ class ALSTMDiscrete(nn.Module):
         )
         self.lstm_layer = nn.LSTM(input_size=hidden_size, hidden_size=hidden_size, num_layers=n_layers, batch_first=True, dropout=dropout)
         self.fc_out = nn.Linear(hidden_size, action_space)        
+        self.fc_out.weight.data.normal_(0, out_layer_std)
 
     def forward(self, x, hx=None):
         x = self.fc_in(x)
@@ -127,6 +138,7 @@ class FFDiscrete(nn.Module):
             nn.Dropout(p=dropout), 
         )  
         self.fc_out = nn.Linear(hidden_size, action_space)
+        self.fc_out.weight.data.normal_(0, out_layer_std)
 
     def forward(self, x) -> torch.Tensor:
         x = self.fc_in(x)
@@ -139,6 +151,7 @@ class LinearDiscrete(nn.Module):
     def __init__(self, observation_space=8, hidden_size=128, action_space=3, dropout=0.1) -> None:
         super(LinearDiscrete, self).__init__()
         self.fc_out = nn.Linear(observation_space, action_space)
+        self.fc_out.weight.data.normal_(0, out_layer_std)
 
     def forward(self, x) -> torch.Tensor:
         x = self.fc_out(x)
@@ -165,6 +178,7 @@ class CConvSA(nn.Module):
         )
         conv_out = _get_seq_out(self.conv, hidden_size)
         self.fc3 = nn.Linear(conv_out,1)
+        self.fc3.weight.data.normal_(0, out_layer_std)
         
     def forward(self, state, action):
         x = self.fc1(state)
@@ -186,6 +200,7 @@ class CFFSA(nn.Module):
         self.fc1 = nn.Linear(observation_space,hidden_size*2)
         self.fc2 = nn.Linear(((hidden_size*2)+action_space),hidden_size)
         self.fc3 = nn.Linear(hidden_size,1)
+        self.fc3.weight.data.normal_(0, out_layer_std)
         
     def forward(self, state, action):
         x = self.fc1(state)
