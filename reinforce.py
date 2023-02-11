@@ -1,18 +1,18 @@
-#Pay attention to possible exploding gradient for certain hyperparameters
-#torch.nn.utils.clip_grad_norm_(net.parameters(), 1) 
-#Maybe implement a safety mechanism that clips gradients 
 from itertools import accumulate
 import numpy as np
 import torch
 import torch.optim as optim
 torch.manual_seed(0)
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+gradient_clip_threshold = 1
 
 
-def optimize(optimizer: optim.Adam, loss: torch.Tensor) -> None: 
+def optimize(optimizer: optim.Adam, loss: torch.Tensor, net=None, gradient_clipping=False) -> None: 
     """ Set gradients to zero, backpropagate loss, optimization step """
     optimizer.zero_grad()
     loss.backward()
+    if gradient_clipping:
+        torch.nn.utils.clip_grad_norm_(net.parameters(), gradient_clip_threshold) 
     optimizer.step()
 
 
@@ -27,7 +27,7 @@ def get_policy_loss(rewards: list, log_probs: list, normalize=True) -> torch.Ten
 
 
 def reinforce(policy_network: torch.nn.Module, env, act, alpha=1e-3, 
-              discount_factor=0, normalize_rewards=True,
+              discount_factor=0, normalize_rewards=True, gradient_clipping=False,
               weight_decay=1e-5, exploration_rate=1, exploration_decay=(1-1e-4), 
               exploration_min=0, num_episodes=1000, 
               max_episode_length=np.iinfo(np.int32).max, train=True, 
@@ -43,6 +43,10 @@ def reinforce(policy_network: torch.nn.Module, env, act, alpha=1e-3,
         act: a function that uses the policy network to generate some output 
              based on the state, and then transforms that output to an action.
         alpha (float): the learning rate on [0,1] for the policy network. 
+        discount_factor (float): number on [0,1] discounting future rewards.
+        normalize_rewards (bool): normalizes the rewards in policy optimization.
+        gradient_clipping (bool): clips gradients above a threshold in policy 
+             optimization. 
         weight_decay (float): regularization parameter for the policy network.
         exploration_rate (number): the intial exploration rate.
         exploration_decay (number): the exploration decay rate.
@@ -107,7 +111,7 @@ def reinforce(policy_network: torch.nn.Module, env, act, alpha=1e-3,
         if train and rewards != []:
             weighted_rewards = list(accumulate(reversed(rewards), lambda x,y: x*discount_factor + y))[::-1]
             policy_loss = get_policy_loss(weighted_rewards, log_probs, normalize_rewards)
-            optimize(optimizer, policy_loss)
+            optimize(optimizer, policy_loss, policy_network, gradient_clipping)
 
         total_rewards.extend(rewards)
         total_actions.extend(actions)
