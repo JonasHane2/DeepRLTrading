@@ -174,6 +174,12 @@ def get_state_and_non_norm_price(prices: list, volumes: list, idx: list, labels:
     return states, non_norm_prices
 
 
+def get_next_month_contracts(df: pd.DataFrame) -> pd.DataFrame:
+    """ Returns the contracts that have delivery the subsequent month """
+    next_month_series = df[df['FirstSequenceItemName'] == df.index.shift(1, freq="MS").strftime("%b-%y")]
+    return next_month_series
+
+
 def get_state_array_time_freq(dfs: list, labels: list, freq="1D", returns_lag=[1,5,20], riskfree_asset=False, train_freq=1): 
     """
     Sets index to datetime for all dataframes. 
@@ -198,6 +204,7 @@ def get_state_array_time_freq(dfs: list, labels: list, freq="1D", returns_lag=[1
                                     instrument in the state array (including the riskfree asset if used). 
     """
     dfs = [d.set_index('DateTime') for d in dfs] 
+    dfs = [get_next_month_contracts(d) for d in dfs]
     prices = [get_price_time_freq(d, freq) for d in dfs] 
     indices = [d.index for d in prices]
     index_intersection = list(set(indices[0]).intersection(*indices))
@@ -225,7 +232,9 @@ def get_state_array_bars(dfs: list, labels: list, bar_type='tick', avg_bars_per_
         non_norm_prices (DataFrame): a dataframe consisting of the non normalized prices of every
                                     instrument in the state array (including the riskfree asset if used). 
     """
-    dfs = [d.set_index('DateTime').sort_index() for d in dfs]
+    dfs = [d.set_index('DateTime') for d in dfs]
+    dfs = [get_next_month_contracts(d) for d in dfs]
+    dfs = [d.sort_index() for d in dfs]
     if imbalance_bars:
         bars = ImbalanceBars(bar_type=bar_type, avg_bars_per_day=avg_bars_per_day)
     else:
@@ -241,3 +250,4 @@ def get_state_array_bars(dfs: list, labels: list, bar_type='tick', avg_bars_per_
     prices = [get_price_dataframe_bars(d, index_union) for d in dfs]
     volumes = [get_volume_dataframe_bars(d, index_union) for d in dfs]
     return get_state_and_non_norm_price(prices, volumes, index_union, labels, returns_lag, riskfree_asset, train_freq=train_freq)
+    
