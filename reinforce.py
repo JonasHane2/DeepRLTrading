@@ -22,7 +22,7 @@ def get_policy_loss(rewards: list, log_probs: list, normalize=True) -> torch.Ten
     if len(r) > 1 and normalize:
         r = (r - r.mean()) / (r.std() + float(np.finfo(np.float32).eps))
     log_probs = torch.stack(log_probs).squeeze().to(device)
-    policy_loss = torch.mul(log_probs, r).mul(-1).sum().to(device)
+    policy_loss = torch.mul(log_probs, r).mul(-1).mean().to(device)
     return policy_loss
 
 
