@@ -14,6 +14,7 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 #criterion = torch.nn.MSELoss()
 criterion = torch.nn.HuberLoss()
 
+
 def soft_updates(net: torch.nn.Module, target_net: torch.nn.Module, tau: float):
     """ Ø' <- tØ' + (1-t)Ø """
     tau = min(1, max(0, tau))
@@ -27,47 +28,51 @@ def update(replay_buffer: ReplayMemory, batch_size: int,
            critic: torch.nn.Module, actor: torch.nn.Module, 
            critic_target: torch.nn.Module, actor_target: torch.nn.Module,
            optimizer_critic: torch.optim, optimizer_actor: torch.optim, 
-           processing, discount_factor, recurrent=False) -> None: 
+           processing, discount_factor, recurrent=False, 
+           normalize_rewards=True, normalize_critic=False,
+           gradient_clipping=True) -> None: 
     """ Get batch, get loss and optimize critic, freeze q net, get loss and optimize actor, unfreeze q net """
     batch = get_batch(replay_buffer, batch_size)
     if batch is None:
         return
     if discount_factor <= 0: 
-        c_loss = cumpute_critic_loss_alternative(critic, batch)
+        c_loss = cumpute_critic_loss_alternative(critic, batch, normalize_rewards)
     else:
-        c_loss = compute_critic_loss(critic, batch, actor_target, critic_target, processing, recurrent, discount_factor)
-    optimize(optimizer_critic, c_loss)
+        c_loss = compute_critic_loss(critic, batch, actor_target, critic_target, processing, recurrent, discount_factor, normalize_rewards)
+    optimize(optimizer_critic, c_loss, critic, gradient_clipping)
     for p in critic.parameters(): # Freeze Q-net
         p.requires_grad = False
-    a_loss = compute_actor_loss(actor, critic, batch[0], processing, recurrent)
-    optimize(optimizer_actor, a_loss)
+    a_loss = compute_actor_loss(actor, critic, batch[0], processing, recurrent, normalize_critic)
+    optimize(optimizer_actor, a_loss, actor, gradient_clipping)
     for p in critic.parameters(): # Unfreeze Q-net
         p.requires_grad = True
 
 
-def compute_actor_loss(actor, critic, state, processing, recurrent=False) -> torch.Tensor: 
+def compute_actor_loss(actor, critic, state, processing, recurrent=False, normalize=False) -> torch.Tensor: 
     """ Returns policy loss -Q(s, mu(s)) """
     action, _ = get_action_pobs(net=actor, state=state, recurrent=recurrent)
     action = processing(action).to(device)
     q_sa = critic(state.to(device), action.to(device)).to(device)
+    if len(q_sa) > 1 and normalize:
+        q_sa = ((q_sa - q_sa.mean()) / (q_sa.std() + float(np.finfo(np.float32).eps))).to(device)
     loss = -1*torch.mean(q_sa) 
     return loss
 
 
-def cumpute_critic_loss_alternative(critic, batch) -> torch.Tensor: 
+def cumpute_critic_loss_alternative(critic, batch, normalize=True) -> torch.Tensor: 
     """ Returns error Q(s_t, a) - R_t+1 """
     state, action, reward, _ = batch
     q_sa = critic(state.to(device), action.view(action.shape[0], -1).to(device)).squeeze().to(device)
-    if len(reward) > 1:
+    if len(reward) > 1 and normalize:
         reward = ((reward - reward.mean()) / (reward.std() + float(np.finfo(np.float32).eps))).to(device)
     loss = criterion(q_sa, reward)
     return loss
 
 
-def compute_critic_loss(critic, batch, actor_target, critic_target, processing, recurrent, discount_factor=0) -> torch.Tensor: 
+def compute_critic_loss(critic, batch, actor_target, critic_target, processing, recurrent, discount_factor=0, normalize=True) -> torch.Tensor: 
     """ Returns error Q(s_t, a) - (R_t+1 + Q(S_t+1, mu(s_t+1))) """
     state, action, reward, next_state = batch
-    if len(reward) > 1:
+    if len(reward) > 1 and normalize:
         reward = ((reward - reward.mean()) / (reward.std() + float(np.finfo(np.float32).eps))).to(device) # does this actually improve performance here?
     with torch.no_grad():
         if recurrent:
@@ -84,8 +89,9 @@ def compute_critic_loss(critic, batch, actor_target, critic_target, processing, 
 
 def deep_determinstic_policy_gradient(
         actor_net: nn.Module, critic_net: nn.Module, env, act, processing, 
-        discount_factor=0, tau=0.2,
-        alpha_actor=1e-3, alpha_critic=1e-3, weight_decay=1e-4, batch_size=30, 
+        discount_factor=0, tau=0.2, normalize_rewards=True, normalize_critic=False,
+        gradient_clipping=True,
+        alpha_actor=1e-4, alpha_critic=1e-3, weight_decay=1e-4, batch_size=128, 
         update_freq=1, exploration_rate=1, exploration_decay=(1-1e-3), 
         exploration_min=0, num_episodes=1000, max_episode_length=np.iinfo(np.int32).max, 
         train=True, print_res=True, print_freq=100, recurrent=False, 
@@ -106,6 +112,10 @@ def deep_determinstic_policy_gradient(
                     It is the same processing that is used in the act function. 
         discount_factor (float): rate of discounting future rewards on interval [0,1]
         tau (float): learning rate for target networks on the interval [0,1]
+        normalize_rewards (bool): normalizes the rewards in critic optimization.
+        normalize_critic (bool): normalizes the critique in policy optimization.
+        gradient_clipping (bool): clips gradients above a threshold in policy 
+             optimization. 
         alpha_actor (float): the learning rate on the interval [0,1] for the actor network.
         alpha_critic (float): the learning rate on the interval [0,1] for the critic network.
         weight_decay (float): regularization parameter for the actor and critic networks.
@@ -183,7 +193,10 @@ def deep_determinstic_policy_gradient(
                        optimizer_actor=optimizer_actor,
                        processing=processing,
                        discount_factor=discount_factor,
-                       recurrent=recurrent)    
+                       recurrent=recurrent, 
+                       normalize_rewards=normalize_rewards,
+                       normalize_critic=normalize_critic,
+                       gradient_clipping=gradient_clipping)    
             
             if discount_factor > 0:
                 soft_updates(critic_net, critic_target_net, tau)

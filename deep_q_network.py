@@ -8,13 +8,14 @@ from action_selection import get_action_pobs
 from reinforce import optimize
 torch.manual_seed(0)
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-criterion = torch.nn.MSELoss()
+#criterion = torch.nn.MSELoss()
+criterion = torch.nn.HuberLoss()
 
 
-def compute_loss_dqn(batch: tuple, net: torch.nn.Module, recurrent=False) -> torch.Tensor: 
+def compute_loss_dqn(batch: tuple, net: torch.nn.Module, recurrent=False, normalize=True) -> torch.Tensor: 
     """ Return critic loss 1/N * (Q(s_t, a_t) - R)^2 for t = 0,1,...,N """
     state_batch, action_batch, reward_batch, _ = batch
-    if len(reward_batch) > 1:
+    if len(reward_batch) > 1 and normalize:
         reward_batch = ((reward_batch - reward_batch.mean()) / (reward_batch.std() + float(np.finfo(np.float32).eps))).to(device)
     action_batch = action_batch.flatten().long().add(1) #add 1 because -1 actions before
     state_vals, _ = get_action_pobs(net=net, state=state_batch, recurrent=recurrent)
@@ -22,17 +23,19 @@ def compute_loss_dqn(batch: tuple, net: torch.nn.Module, recurrent=False) -> tor
     return criterion(state_action_vals, reward_batch).to(device)
 
 
-def update(replay_buffer: ReplayMemory, batch_size: int, net: torch.nn.Module, optimizer: torch.optim, recurrent=False) -> None:
+def update(replay_buffer: ReplayMemory, batch_size: int, net: torch.nn.Module, optimizer: torch.optim, 
+           recurrent=False, normalize_rewards=True, gradient_clipping=True) -> None:
     """ Get loss and perform optimization step """
     batch = get_batch(replay_buffer, batch_size)
     if batch is None:
         return
-    loss = compute_loss_dqn(batch, net, recurrent)
-    optimize(optimizer, loss)
+    loss = compute_loss_dqn(batch, net, recurrent, normalize_rewards)
+    optimize(optimizer, loss, net, gradient_clipping)
 
 
-def deep_q_network(q_net, env, act, alpha=1e-4, weight_decay=1e-5, batch_size=10, 
-                   exploration_rate=1, exploration_decay=(1-1e-3), exploration_min=0, 
+def deep_q_network(q_net, env, act, alpha=1e-4, weight_decay=1e-5, batch_size=64, 
+                   update_freq=1, normalize_rewards=True, gradient_clipping=True,
+                   exploration_rate=1, exploration_decay=(1-1e-4), exploration_min=0, 
                    num_episodes=1000, max_episode_length=np.iinfo(np.int32).max, 
                    train=True, print_res=True, print_freq=100, recurrent=False, 
                    replay_buffer_size=1000, early_stopping=False, 
@@ -108,8 +111,14 @@ def deep_q_network(q_net, env, act, alpha=1e-4, weight_decay=1e-5, batch_size=10
                                torch.FloatTensor([reward]), 
                                torch.from_numpy(next_state).float().unsqueeze(0).to(device))
 
-            if train and len(replay_buffer) >= batch_size:
-                update(replay_buffer, batch_size, q_net, optimizer, recurrent)
+            if train and len(replay_buffer) >= batch_size and (i+1) % update_freq == 0:
+                update(replay_buffer=replay_buffer, 
+                       batch_size=batch_size,
+                       net=q_net,
+                       optimizer=optimizer,
+                       recurrent=recurrent, 
+                       normalize_rewards=normalize_rewards,
+                       gradient_clipping=gradient_clipping)
 
             state = next_state
             exploration_rate = max(exploration_rate*exploration_decay, exploration_min)
