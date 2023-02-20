@@ -20,7 +20,7 @@ def compute_loss_dqn(batch: tuple, net: torch.nn.Module, recurrent=False, normal
     action_batch = action_batch.flatten().long().add(1) #add 1 because -1 actions before
     state_vals, _ = get_action_pobs(net=net, state=state_batch, recurrent=recurrent)
     state_action_vals = state_vals[range(action_batch.size(0)), action_batch]
-    return criterion(state_action_vals, reward_batch).to(device)
+    return criterion(state_action_vals, reward_batch.to(device)).to(device)
 
 
 def update(replay_buffer: ReplayMemory, batch_size: int, net: torch.nn.Module, optimizer: torch.optim, 
