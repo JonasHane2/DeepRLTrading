@@ -65,7 +65,7 @@ def cumpute_critic_loss_alternative(critic, batch, normalize=True) -> torch.Tens
     q_sa = critic(state.to(device), action.view(action.shape[0], -1).to(device)).squeeze().to(device)
     if len(reward) > 1 and normalize:
         reward = ((reward - reward.mean()) / (reward.std() + float(np.finfo(np.float32).eps))).to(device)
-    loss = criterion(q_sa, reward)
+    loss = criterion(q_sa, reward.to(device))
     return loss
 
 
@@ -83,7 +83,7 @@ def compute_critic_loss(critic, batch, actor_target, critic_target, processing, 
         q_sa_hat = critic_target(next_state, a_hat).squeeze()
     q_sa = critic(state.to(device), action.view(action.shape[0], -1).to(device)).squeeze().to(device)
     target = reward + discount_factor * q_sa_hat
-    loss = criterion(q_sa, target)
+    loss = criterion(q_sa, target.to(device))
     return loss
 
 
