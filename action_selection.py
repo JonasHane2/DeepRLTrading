@@ -85,8 +85,8 @@ def act_stochastic_portfolio(net: nn.Module, state: np.ndarray, hx=None, recurre
     """ Returns a sampled action the interval [-1, 1] for N instruments, the log probability of choosing that action, and the hidden state """
     state = torch.from_numpy(state).float().unsqueeze(0).to(device)
     probs, hx = get_action_pobs(net, state, hx, recurrent)
-    probs = add_noise(probs, epsilon)
-    m = MultivariateNormal(probs.to(device), torch.eye(probs.size(1)).to(device)) # second arg is indentity matrix of size num instruments X num instruments
+    cov_matrix = max(epsilon, 1e-8)*torch.eye(probs.size(1))
+    m = MultivariateNormal(probs.to(device), cov_matrix.to(device))
     action = m.sample().to(device)
     logprob = m.log_prob(action)
     action = action_transform(action)
@@ -100,8 +100,8 @@ def act_stochastic_portfolio_long(net: nn.Module, state: np.ndarray, hx=None, re
         the log probability of choosing that action, and the hidden state """
     state = torch.from_numpy(state).float().unsqueeze(0).to(device)
     probs, hx = get_action_pobs(net, state, hx, recurrent) 
-    probs = add_noise(probs, epsilon)
-    m = MultivariateNormal(probs.to(device), torch.eye(probs.size(1)).to(device))
+    cov_matrix = max(epsilon, 1e-8)*torch.eye(probs.size(1))
+    m = MultivariateNormal(probs.to(device), cov_matrix.to(device))
     action = m.sample().to(device)
     logprob = m.log_prob(action)
     action = F.softmax(action, dim=1)
