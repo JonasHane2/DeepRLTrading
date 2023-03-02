@@ -35,7 +35,7 @@ def update(replay_buffer: ReplayMemory, batch_size: int, net: torch.nn.Module, o
 
 def deep_q_network(q_net, env, act, alpha=1e-4, weight_decay=1e-5, batch_size=64, 
                    update_freq=1, normalize_rewards=True, gradient_clipping=True,
-                   exploration_rate=1, exploration_decay=(1-1e-4), exploration_min=0, 
+                   exploration_rate=1, exploration_decay=0.9, exploration_min=0, 
                    num_episodes=1000, max_episode_length=np.iinfo(np.int32).max, 
                    train=True, print_res=True, print_freq=100, recurrent=False, 
                    replay_buffer_size=1000, early_stopping=False, 
@@ -121,7 +121,6 @@ def deep_q_network(q_net, env, act, alpha=1e-4, weight_decay=1e-5, batch_size=64
                        gradient_clipping=gradient_clipping)
 
             state = next_state
-            exploration_rate = max(exploration_rate*exploration_decay, exploration_min)
 
         total_rewards.extend(rewards)
         total_actions.extend(actions)
@@ -133,6 +132,7 @@ def deep_q_network(q_net, env, act, alpha=1e-4, weight_decay=1e-5, batch_size=64
             hx = None
             total_rewards = []
             total_actions = []
+            exploration_rate = max(exploration_rate*exploration_decay, exploration_min)
             completed_episodes_counter += 1
 
         if done and print_res and (completed_episodes_counter-1) % print_freq == 0:

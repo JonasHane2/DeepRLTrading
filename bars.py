@@ -9,28 +9,27 @@ class Bars():
         self.bar_types = ["tick", "volume", "dollar"]
         self.bar_type = bar_type
         if self.bar_type not in self.bar_types:
-            raise ValueError("Invalid imbalance type %s. Expected one of: %s" % (bar_type, self.bar_types))
+            raise ValueError("Invalid imbalance type %s. Expected one of: %s" % (bar_type, self.bar_types))        
 
     def get_threshold(self, trades: pd.DataFrame, avg_bars_per_day=100) -> float:
         """
-        Returns an estimate for threshold to get a target average number of samples per day.
-
+        Returns an initial estimate for threshold to get a target average number of samples per day
+        based on the first month of trades.
         Args: 
             trade (series): information about a tick
             avg_bars_per_day (integer): the target number of samples per day. 
         Returns: 
             (float): the threshold to achieve the desired bar sampling frequency. 
         """
-        total_num_trades = len(trades)
-        total_num_of_days = (trades.index[-1]-trades.index[0]).days
-        avg_vol_trades = np.average(trades['Volume'])
-        avg_price_trades = np.average(trades['Price'])
         if self.bar_type == "tick":
-            return total_num_trades / ((avg_bars_per_day * total_num_of_days) + float(np.finfo(np.float32).eps))
+            threshold = trades['Price'].resample('1D').count()
         elif self.bar_type == "volume":
-            return total_num_trades * avg_vol_trades / ((avg_bars_per_day * total_num_of_days) + float(np.finfo(np.float32).eps))
+            threshold = trades['Volume'].resample('1D').sum()
         else:
-            return total_num_trades * avg_vol_trades * avg_price_trades / ((avg_bars_per_day * total_num_of_days) + float(np.finfo(np.float32).eps))
+            threshold = (trades['Volume']*trades['Price']).resample('1D').sum()
+        threshold = threshold.rolling('90D').mean().bfill()
+        threshold /= avg_bars_per_day
+        return threshold
 
     def get_inc(self, trade: pd.Series) -> float:
         """
@@ -52,12 +51,14 @@ class Bars():
         Returns: 
             idx (list): indices of when the threshold is reached
         """
-        threshold = self.get_threshold(trades, self.avg_bars_per_day)
         idx =[]
+        threshold = self.get_threshold(trades, self.avg_bars_per_day)
+        curr_threshold=0
         for i, row in trades.iterrows():
             self.theta += self.get_inc(row)
-            if self.theta >= threshold:
+            if self.theta >= curr_threshold:
                 idx.append(i)
+                curr_threshold = threshold.iloc[threshold.index.get_loc(i, method='ffill')]
                 self.theta = 0
         return idx
 
@@ -66,7 +67,7 @@ class ImbalanceBars(Bars):
     def __init__(self, bar_type="tick", avg_bars_per_day=100) -> None:
         super().__init__(bar_type, avg_bars_per_day)
         self.avg_bars_per_day = avg_bars_per_day
-        self.threshold = 0
+        self.curr_threshold = 0
         self.b = [0] 
         self.prev_price = 0
         self.days_between_samples = []
@@ -92,26 +93,13 @@ class ImbalanceBars(Bars):
         imbalance = self.b[-1] * self.get_inc(trade)
         self.theta += imbalance 
         self.prev_price = price
-        if abs(self.theta) >= self.threshold:
+        if abs(self.theta) >= self.curr_threshold:
             self.theta = 0
             return True 
         current_num_days = (trade.name - prev_observation_date).days
         if current_num_days > (1/self.avg_bars_per_day):
-            self.threshold *= 0.9
+            self.curr_threshold *= 0.9
         return False 
-
-    def get_imbalance_threshold_estimates(self, trades: pd.DataFrame, avg_bars_per_day=100) -> float:
-        """ Estimate for what the threshold should be to generate 'avg_bars_per_day' imbalance bars per day. """
-        return np.log(self.get_threshold(trades, avg_bars_per_day))
-
-    def update_threshold(self, idx: list) -> None:
-        """ Adjusts the threshold by comparing the previous sample frequency to the target. """
-        avg_lookback_window = 60
-        self.days_between_samples.append((idx[-1]-idx[-2]).days)
-        if len(self.days_between_samples) >= avg_lookback_window:
-            avg_sample_freq = max(np.average(self.days_between_samples[-avg_lookback_window:]), 1/avg_lookback_window)
-            diff = avg_sample_freq * self.avg_bars_per_day 
-            self.threshold /= (diff + float(np.finfo(np.float32).eps))
 
     def get_all_imbalance_ids(self, trades: pd.DataFrame) -> list:
         """
@@ -120,10 +108,11 @@ class ImbalanceBars(Bars):
         Returns: 
             (list): datetimes of when the threshold is reached. 
         """
-        self.threshold = self.get_imbalance_threshold_estimates(trades, self.avg_bars_per_day)
+        threshold = self.get_threshold(trades, self.avg_bars_per_day)
+        self.curr_threshold=0
         idx = [trades.index[0]]
         for i, row in trades.iterrows():
             if self.register_new_tick(row, idx[-1]):
                 idx.append(i)
-                self.update_threshold(idx)
+                self.curr_threshold = np.log(threshold.iloc[threshold.index.get_loc(i, method='ffill')])
         return list(dict.fromkeys(idx))

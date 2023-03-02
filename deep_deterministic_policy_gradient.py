@@ -11,8 +11,8 @@ from reinforce import optimize
 from action_selection import get_action_pobs
 torch.manual_seed(0)
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-#criterion = torch.nn.MSELoss()
-criterion = torch.nn.HuberLoss()
+criterion = torch.nn.MSELoss()
+#criterion = torch.nn.HuberLoss()
 
 
 def soft_updates(net: torch.nn.Module, target_net: torch.nn.Module, tau: float):
@@ -92,7 +92,7 @@ def deep_determinstic_policy_gradient(
         discount_factor=0, tau=0.2, normalize_rewards=True, normalize_critic=False,
         gradient_clipping=True,
         alpha_actor=1e-4, alpha_critic=1e-3, weight_decay=1e-4, batch_size=128, 
-        update_freq=1, exploration_rate=1, exploration_decay=(1-1e-3), 
+        update_freq=1, exploration_rate=1, exploration_decay=0.9, 
         exploration_min=0, num_episodes=1000, max_episode_length=np.iinfo(np.int32).max, 
         train=True, print_res=True, print_freq=100, recurrent=False, 
         replay_buffer_size=1000, early_stopping=False, early_stopping_freq=100, val_env=None
@@ -202,7 +202,6 @@ def deep_determinstic_policy_gradient(
                 soft_updates(critic_net, critic_target_net, tau)
                 soft_updates(actor_net, actor_target_net, tau)
             state = next_state
-            exploration_rate = max(exploration_rate*exploration_decay, exploration_min)
 
         total_rewards.extend(rewards)
         total_actions.extend(actions)
@@ -214,6 +213,7 @@ def deep_determinstic_policy_gradient(
             hx = None
             total_rewards = []
             total_actions = []
+            exploration_rate = max(exploration_rate*exploration_decay, exploration_min)
             completed_episodes_counter += 1
 
         if done and print_res and (completed_episodes_counter-1) % print_freq == 0:

@@ -11,6 +11,15 @@ def long_only_portfolio(prices: pd.DataFrame, scaled=False) -> pd.DataFrame:
     return pd.DataFrame(np.ones((prices.shape[0]-1, prices.shape[1])), index=prices.index[:-1]).set_axis(list(prices.columns), axis=1, inplace=False)
 
 
+def buy_and_hold(prices: pd.DataFrame) -> pd.DataFrame: 
+    """ Returns a buy and hold portfolio returns history """
+    portfolio_returns = prices.pct_change().tail(-1).add(1).cumprod().sum(axis=1).divide(prices.shape[1])
+    portfolio_returns = portfolio_returns.resample("1D").sum().fillna(0)
+    if portfolio_returns.index.tzinfo is None or portfolio_returns.index.tzinfo.utcoffset(portfolio_returns.index) is None:
+        portfolio_returns.index = portfolio_returns.index.tz_localize('utc')
+    return portfolio_returns
+
+
 def percentage_returns(prices: pd.DataFrame, positions: pd.DataFrame) -> pd.DataFrame:
     """ Returns the % returns for every intsrument in the portfolio.
         The number of prices should always be one greater than the number of positions.
@@ -22,20 +31,22 @@ def percentage_returns(prices: pd.DataFrame, positions: pd.DataFrame) -> pd.Data
     return portfolio_returns
 
 
-def transaction_cost_history(prices: pd.DataFrame, positions: pd.DataFrame, transaction_fraction=0.00002) -> pd.Series:
+def transaction_cost_history(prices: pd.DataFrame, positions: pd.DataFrame, transaction_fraction=0.00002, slip=False, market_imp=False) -> pd.Series:
     """ Returns a series of the transaction costs paid during the trading history. """
     pval = np.insert(positions.values, [0], positions.iloc[0]*transaction_fraction, axis=0)
     tc2 = transaction_cost_model(position_new=pval[1:], 
                                  position_old=pval[:-1], 
                                  price_new=prices.values[1:], 
                                  price_old=prices.values[:-1], 
-                                 transaction_fraction=transaction_fraction)
+                                 transaction_fraction=transaction_fraction,
+                                 slip=slip,
+                                 market_imp=market_imp)
     tc2 = np.sum(tc2, axis=1)
     tc2 = pd.Series(tc2, index=positions.index)
     return tc2
 
 
-def create_pyfolio_compatible_returns_history(prices: pd.DataFrame, positions: pd.DataFrame, transaction_fraction=0.00002) -> pd.Series:
+def create_pyfolio_compatible_returns_history(prices: pd.DataFrame, positions: pd.DataFrame, transaction_fraction=0.00002, slip=False, market_imp=False) -> pd.Series:
     """ Takes the prices of all instruments and their corresponding positions as argument.
         Calculates their noncumulative returns individually and takes the sum. 
         Subtracts transaction costs. Averages over daily returns. The returned series is compatible with pyfolio. """
@@ -45,7 +56,7 @@ def create_pyfolio_compatible_returns_history(prices: pd.DataFrame, positions: p
     portfolio_returns = portfolio_returns.fillna(0)
 
     # Transaction costs as a % 
-    tc = transaction_cost_history(prices, positions, transaction_fraction)
+    tc = transaction_cost_history(prices, positions, transaction_fraction, slip, market_imp)
 
     # Net % returns
     portfolio_returns = portfolio_returns.subtract(np.append(tc.values, 0))
@@ -60,16 +71,16 @@ def positions_numpy_to_dataframe(positions: np.ndarray, prices: pd.DataFrame, la
     return pd.DataFrame(positions, index=prices.index[:-1]).set_axis(labels, axis=1, inplace=False)
 
 
-def get_baseline_returns_history(baseline_strat, prices: pd.DataFrame, scaled=False) -> pd.DataFrame:
+def get_baseline_returns_history(baseline_strat, prices: pd.DataFrame, scaled=False, transaction_fraction=0.00002, slip=False, market_imp=False) -> pd.DataFrame:
     """ Gets the returns for a baseline strategy that is compatible with pyfolio """
     baseline_portfolio = baseline_strat(prices, scaled=scaled) 
-    baseline_returns_history = create_pyfolio_compatible_returns_history(prices, baseline_portfolio)
+    baseline_returns_history = create_pyfolio_compatible_returns_history(prices, baseline_portfolio, transaction_fraction, slip, market_imp)
     return baseline_returns_history
 
 
-def get_pyfolio_history(prices: pd.DataFrame, positions: np.ndarray): 
+def get_pyfolio_history(prices: pd.DataFrame, positions: np.ndarray, transaction_fraction=0.00002, slip=False, market_imp=False): 
     """ Returns returns history for pyfolio. """
     labels = list(prices.columns)
     positions = positions_numpy_to_dataframe(positions, prices, labels)
-    returns_history = create_pyfolio_compatible_returns_history(prices, positions)
+    returns_history = create_pyfolio_compatible_returns_history(prices, positions, transaction_fraction, slip, market_imp)
     return returns_history

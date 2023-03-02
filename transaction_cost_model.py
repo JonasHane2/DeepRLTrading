@@ -1,7 +1,7 @@
 import numpy as np
 
 
-def transaction_cost_model(position_new, position_old, price_new, price_old, transaction_fraction=0.0002) -> np.ndarray:
+def transaction_cost_model(position_new, position_old, price_new, price_old, transaction_fraction=0.0002, slip=False, market_imp=False) -> np.ndarray:
     """ Calculates the transaction costs for a single trade, or a list of trades. """
     if len(position_new.shape) == 1:
         position_new = np.array([position_new])
@@ -14,10 +14,11 @@ def transaction_cost_model(position_new, position_old, price_new, price_old, tra
 
     volatility = np.std((price_new / (price_old + float(np.finfo(np.float32).eps))), axis=0)    
     trade_size = size_of_trade(position_new, position_old, price_new, price_old)
-    c_n_f = comissions_and_fees(trade_size=trade_size, transaction_fraction=transaction_fraction)
-    slip = slippage(trade_size=trade_size, volatility=volatility)
-    m_imp = market_impact(trade_size=trade_size, volatility=volatility)
-    tc = (c_n_f + slip + m_imp)
+    tc = comissions_and_fees(trade_size=trade_size, transaction_fraction=transaction_fraction)
+    if slip:
+        tc += slippage(trade_size=trade_size, volatility=volatility)
+    if market_imp:
+        tc += market_impact(trade_size=trade_size, volatility=volatility)
     return tc
 
 

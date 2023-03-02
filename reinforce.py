@@ -28,7 +28,7 @@ def get_policy_loss(rewards: list, log_probs: list, normalize=True) -> torch.Ten
 
 def reinforce(policy_network: torch.nn.Module, env, act, alpha=1e-3, 
               discount_factor=0, normalize_rewards=True, gradient_clipping=False,
-              weight_decay=1e-5, exploration_rate=1, exploration_decay=(1-1e-4), 
+              weight_decay=1e-5, exploration_rate=1, exploration_decay=0.9, 
               exploration_min=0, num_episodes=1000, 
               max_episode_length=np.iinfo(np.int32).max, train=True, 
               print_res=True, print_freq=100, recurrent=False, 
@@ -106,7 +106,6 @@ def reinforce(policy_network: torch.nn.Module, env, act, alpha=1e-3,
             actions.append(action)
             rewards.append(reward) 
             log_probs.append(log_prob)
-            exploration_rate = max(exploration_rate*exploration_decay, exploration_min)
 
         if train and rewards != []:
             weighted_rewards = list(accumulate(reversed(rewards), lambda x,y: x*discount_factor + y))[::-1]
@@ -122,6 +121,7 @@ def reinforce(policy_network: torch.nn.Module, env, act, alpha=1e-3,
             state = env.reset() #S_0
             total_rewards = []
             total_actions = []
+            exploration_rate = max(exploration_rate*exploration_decay, exploration_min)
             completed_episodes_counter += 1
 
         if done and print_res and (completed_episodes_counter-1) % print_freq == 0:
