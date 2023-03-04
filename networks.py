@@ -58,6 +58,7 @@ class AConvLSTMDiscrete(nn.Module): #DRQN
         x = x.unsqueeze(1) 
         x = self.conv(x)
         x = x.view(x.shape[0], -1)
+        self.lstm_layer.flatten_parameters()
         if hx is not None:
             x, hx = self.lstm_layer(x, hx)
         else: 
@@ -116,6 +117,7 @@ class ALSTMDiscrete(nn.Module):
 
     def forward(self, x, hx=None):
         x = self.fc_in(x)
+        self.lstm_layer.flatten_parameters()
         if hx is not None:
             x, hx = self.lstm_layer(x, hx)
         else: 
