@@ -159,5 +159,6 @@ def deep_q_network(q_net, env, act, alpha=1e-4, weight_decay=1e-5, batch_size=64
                 return np.array(reward_history), np.array(action_history)
             q_net_copy = deepcopy(q_net)
             validation_rewards.append(val_reward[0])
+            q_net.train()
 
     return np.array(reward_history), np.array(action_history)

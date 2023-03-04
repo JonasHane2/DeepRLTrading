@@ -243,5 +243,7 @@ def deep_determinstic_policy_gradient(
             actor_net_copy = deepcopy(actor_net)
             critic_net_copy = deepcopy(critic_net)
             validation_rewards.append(val_reward[0])
-
+            actor_net.train()
+            critic_net.train()
+    
     return np.array(reward_history), np.array(action_history)

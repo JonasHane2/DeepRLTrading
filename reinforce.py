@@ -133,7 +133,7 @@ def reinforce(policy_network: torch.nn.Module, env, act, alpha=1e-3,
             print()
         
         if done and early_stopping and completed_episodes_counter % early_stopping_freq == 0:
-            val_reward, _ = reinforce(policy_network, 
+            val_reward, _ = reinforce(deepcopy(policy_network), 
                                       val_env, 
                                       act, 
                                       train=False, 
@@ -147,6 +147,7 @@ def reinforce(policy_network: torch.nn.Module, env, act, alpha=1e-3,
                 policy_network.load_state_dict(policy_network_copy.state_dict())
                 return np.array(reward_history), np.array(action_history)
             policy_network_copy = deepcopy(policy_network)
-            validation_rewards.append(val_reward[0]) 
+            validation_rewards.append(val_reward[0])
+            policy_network.train()
 
     return np.array(reward_history), np.array(action_history)
