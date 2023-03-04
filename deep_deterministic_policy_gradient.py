@@ -234,9 +234,14 @@ def deep_determinstic_policy_gradient(
                                                               print_res=False, 
                                                               recurrent=recurrent, 
                                                               exploration_rate=0, 
-                                                              exploration_min=0)
+                                                              exploration_min=0,
+                                                              early_stopping=False)
             if len(validation_rewards) > 0 and val_reward[0] < validation_rewards[-1]:
+                actor_net.load_state_dict(actor_net_copy.state_dict())
+                critic_net.load_state_dict(critic_net_copy.state_dict())
                 return np.array(reward_history), np.array(action_history)
-            validation_rewards.append(val_reward)
+            actor_net_copy = deepcopy(actor_net)
+            critic_net_copy = deepcopy(critic_net)
+            validation_rewards.append(val_reward[0])
 
     return np.array(reward_history), np.array(action_history)

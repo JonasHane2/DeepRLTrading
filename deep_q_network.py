@@ -1,5 +1,6 @@
 import sys, os
 sys.path.append(os.path.join(os.path.dirname(__file__))) # for relative imports
+from copy import deepcopy
 import numpy as np
 import torch
 import torch.optim as optim
@@ -8,8 +9,8 @@ from action_selection import get_action_pobs
 from reinforce import optimize
 torch.manual_seed(0)
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-#criterion = torch.nn.MSELoss()
-criterion = torch.nn.HuberLoss()
+criterion = torch.nn.MSELoss()
+#criterion = torch.nn.HuberLoss()
 
 
 def compute_loss_dqn(batch: tuple, net: torch.nn.Module, recurrent=False, normalize=True) -> torch.Tensor: 
@@ -151,9 +152,12 @@ def deep_q_network(q_net, env, act, alpha=1e-4, weight_decay=1e-5, batch_size=64
                                            print_res=False, 
                                            recurrent=recurrent, 
                                            exploration_rate=0, 
-                                           exploration_min=0)
+                                           exploration_min=0,
+                                           early_stopping=False)
             if len(validation_rewards) > 0 and val_reward[0] < validation_rewards[-1]:
+                q_net.load_state_dict(q_net_copy.state_dict())
                 return np.array(reward_history), np.array(action_history)
-            validation_rewards.append(val_reward)
+            q_net_copy = deepcopy(q_net)
+            validation_rewards.append(val_reward[0])
 
     return np.array(reward_history), np.array(action_history)

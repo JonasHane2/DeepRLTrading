@@ -4,10 +4,12 @@ from transaction_cost_model import transaction_cost_model
 
 class PortfolioEnvironment():
 
-    def __init__(self, states, num_instruments=1, transaction_fraction=0.002, num_prev_observations=10, transaction_cost=False, add_prev_position=False, std_lookback=60, std_factor=0, downside_deviation=False) -> None:
+    def __init__(self, states, prices, num_instruments=1, transaction_fraction=0.002, num_prev_observations=10, flatten_prev_observations=True, transaction_cost=False, add_prev_position=False, std_lookback=60, std_factor=0, downside_deviation=False) -> None:
+        self.prices = prices
         self.transaction_fraction = max(float(transaction_fraction), 0.0)
         self.transaction_cost = transaction_cost        
         self.add_prev_position = add_prev_position
+        self.flatten_prev_observations = flatten_prev_observations
         self.num_instruments = num_instruments
         self.states = states
         self.current_index = 0
@@ -26,8 +28,11 @@ class PortfolioEnvironment():
         return self.state()
 
     def state(self) -> np.ndarray:
-        """ Returns the state vector in a flattened format """
-        return self.observations.flatten()
+        """ Returns the state vector """
+        if self.flatten_prev_observations:
+            return self.observations.flatten()
+        else: 
+            return self.observations
 
     def newest_observation(self) -> np.ndarray:
         """ Returns the current position inserted into the current state array, if specified. 
@@ -41,8 +46,10 @@ class PortfolioEnvironment():
         """ Returns reward signal based on the environments chosen reward function. """
         ret = asset_return(position_new=action, 
                         position_old=self.position, 
-                        price_new=self.states[self.current_index][:self.num_instruments], 
-                        price_old=self.states[self.current_index-1][:self.num_instruments], 
+                        #price_new=self.states[self.current_index][:self.num_instruments], 
+                        #price_old=self.states[self.current_index-1][:self.num_instruments], 
+                        price_new=self.prices[self.current_index],
+                        price_old=self.prices[self.current_index-1],
                         transaction_cost=self.transaction_cost)
         
         # Add returns to array of old returns
@@ -77,7 +84,7 @@ class PortfolioEnvironment():
 
 
 def asset_return(position_new, position_old, price_new, price_old, transaction_fraction=0.0002, transaction_cost=True) -> np.ndarray:
-    """ R_t = A_{t-1} * log(p_t / p_{t-1}) - transaction costs """
+    """ R_t = a_{t-1} * log(p_t / p_{t-1}) - transaction costs """
     rtn = position_new * np.log((price_new + float(np.finfo(np.float32).eps))/(price_old + float(np.finfo(np.float32).eps)))
     if transaction_cost: 
         rtn -= transaction_fraction * np.abs(position_new - position_old)

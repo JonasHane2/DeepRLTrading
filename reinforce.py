@@ -1,4 +1,5 @@
 from itertools import accumulate
+from copy import deepcopy
 import numpy as np
 import torch
 import torch.optim as optim
@@ -22,7 +23,7 @@ def get_policy_loss(rewards: list, log_probs: list, normalize=True) -> torch.Ten
     if len(r) > 1 and normalize:
         r = (r - r.mean()) / (r.std() + float(np.finfo(np.float32).eps))
     log_probs = torch.stack(log_probs).squeeze().to(device)
-    policy_loss = torch.mul(log_probs, r).mul(-1).sum().to(device)
+    policy_loss = torch.mul(log_probs, r).mul(-1).mean().to(device)
     return policy_loss
 
 
@@ -140,9 +141,12 @@ def reinforce(policy_network: torch.nn.Module, env, act, alpha=1e-3,
                                       print_res=False, 
                                       recurrent=recurrent, 
                                       exploration_rate=0, 
-                                      exploration_min=0)
+                                      exploration_min=0,
+                                      early_stopping=False)
             if len(validation_rewards) > 0 and val_reward[0] < validation_rewards[-1]:
+                policy_network.load_state_dict(policy_network_copy.state_dict())
                 return np.array(reward_history), np.array(action_history)
-            validation_rewards.append(val_reward)
+            policy_network_copy = deepcopy(policy_network)
+            validation_rewards.append(val_reward[0]) 
 
     return np.array(reward_history), np.array(action_history)
