@@ -15,11 +15,11 @@ criterion = torch.nn.MSELoss()
 
 def compute_loss_dqn(batch: tuple, net: torch.nn.Module, recurrent=False, normalize=True) -> torch.Tensor: 
     """ Return critic loss 1/N * (Q(s_t, a_t) - R)^2 for t = 0,1,...,N """
-    state_batch, action_batch, reward_batch, _ = batch
+    state_batch, action_batch, reward_batch, prev_action = batch
     if len(reward_batch) > 1 and normalize:
         reward_batch = ((reward_batch - reward_batch.mean()) / (reward_batch.std() + float(np.finfo(np.float32).eps))).to(device)
+    state_vals, _ = get_action_pobs(net=net, state=state_batch, recurrent=recurrent, prev_action=prev_action)
     action_batch = action_batch.flatten().long().add(1) #add 1 because -1 actions before
-    state_vals, _ = get_action_pobs(net=net, state=state_batch, recurrent=recurrent)
     state_action_vals = state_vals[range(action_batch.size(0)), action_batch]
     return criterion(state_action_vals, reward_batch.to(device)).to(device)
 
@@ -27,7 +27,7 @@ def compute_loss_dqn(batch: tuple, net: torch.nn.Module, recurrent=False, normal
 def update(replay_buffer: ReplayMemory, batch_size: int, net: torch.nn.Module, optimizer: torch.optim, 
            recurrent=False, normalize_rewards=True, gradient_clipping=True) -> None:
     """ Get loss and perform optimization step """
-    batch = get_batch(replay_buffer, batch_size)
+    batch = get_batch(replay_buffer, batch_size, recurrent)
     if batch is None:
         return
     loss = compute_loss_dqn(batch, net, recurrent, normalize_rewards)
@@ -85,7 +85,8 @@ def deep_q_network(q_net, env, act, alpha=1e-4, weight_decay=1e-5, batch_size=64
     done = False
     state = env.reset() #S_0
     hx = None 
-
+    prev_action = None
+    
     if not train:
         exploration_min = 0
         exploration_rate = exploration_min
@@ -99,10 +100,12 @@ def deep_q_network(q_net, env, act, alpha=1e-4, weight_decay=1e-5, batch_size=64
         actions = []
 
         for i in range(max_episode_length): 
-            action, hx = act(q_net, state, hx, recurrent, exploration_rate) 
+            action, hx = act(q_net, state, prev_action, hx, recurrent, exploration_rate) 
             next_state, reward, done, _ = env.step(action) 
 
-            if done:
+            if done: 
+                if recurrent: 
+                    replay_buffer.push(None, None, None, None)
                 break
 
             actions.append(action)
@@ -110,7 +113,9 @@ def deep_q_network(q_net, env, act, alpha=1e-4, weight_decay=1e-5, batch_size=64
             replay_buffer.push(torch.from_numpy(state).float().unsqueeze(0).to(device), 
                                torch.FloatTensor(np.array([action])), 
                                torch.FloatTensor([reward]), 
-                               torch.from_numpy(next_state).float().unsqueeze(0).to(device))
+                               torch.FloatTensor(np.zeros((1, action.shape[0]))) if prev_action is None else torch.FloatTensor(np.array(prev_action)))
+                               #torch.from_numpy(next_state).float().unsqueeze(0).to(device))
+            prev_action = torch.Tensor(action).unsqueeze(0)
 
             if train and len(replay_buffer) >= batch_size and (i+1) % update_freq == 0:
                 update(replay_buffer=replay_buffer, 
@@ -131,6 +136,7 @@ def deep_q_network(q_net, env, act, alpha=1e-4, weight_decay=1e-5, batch_size=64
             action_history.append(np.array(total_actions))
             state = env.reset()
             hx = None
+            prev_action = None
             total_rewards = []
             total_actions = []
             exploration_rate = max(exploration_rate*exploration_decay, exploration_min)

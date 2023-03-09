@@ -76,6 +76,7 @@ def reinforce(policy_network: torch.nn.Module, env, act, alpha=1e-3,
     completed_episodes_counter = 0
     done = False
     state = env.reset() #S_0
+    prev_action = None#torch.Tensor([[0]])
 
     if not train:
         exploration_min = 0
@@ -84,13 +85,6 @@ def reinforce(policy_network: torch.nn.Module, env, act, alpha=1e-3,
     else:
         policy_network.train()
 
-    done = False
-    state = env.reset() #S_0
-    total_rewards = []
-    total_actions = []
-    completed_episodes_counter = 0
-    validation_rewards = []
-
     for n in range(num_episodes):
         rewards = [] 
         actions = [] 
@@ -98,8 +92,9 @@ def reinforce(policy_network: torch.nn.Module, env, act, alpha=1e-3,
         hx = None
 
         for _ in range(max_episode_length):
-            action, log_prob, hx = act(policy_network, state, hx, recurrent, exploration_rate) #A_{t-1}
+            action, log_prob, hx = act(policy_network, state, prev_action, hx, recurrent, exploration_rate) #A_{t-1}
             state, reward, done, _ = env.step(action) # S_t, R_t 
+            prev_action = torch.Tensor(action).unsqueeze(0)
 
             if done:
                 break
@@ -122,6 +117,7 @@ def reinforce(policy_network: torch.nn.Module, env, act, alpha=1e-3,
             state = env.reset() #S_0
             total_rewards = []
             total_actions = []
+            prev_action = None
             exploration_rate = max(exploration_rate*exploration_decay, exploration_min)
             completed_episodes_counter += 1
 

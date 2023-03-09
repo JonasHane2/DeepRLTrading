@@ -32,7 +32,7 @@ def update(replay_buffer: ReplayMemory, batch_size: int,
            normalize_rewards=True, normalize_critic=False,
            gradient_clipping=True) -> None: 
     """ Get batch, get loss and optimize critic, freeze q net, get loss and optimize actor, unfreeze q net """
-    batch = get_batch(replay_buffer, batch_size)
+    batch = get_batch(replay_buffer, batch_size, recurrent) 
     if batch is None:
         return
     if discount_factor <= 0: 
@@ -42,17 +42,18 @@ def update(replay_buffer: ReplayMemory, batch_size: int,
     optimize(optimizer_critic, c_loss, critic, gradient_clipping)
     for p in critic.parameters(): # Freeze Q-net
         p.requires_grad = False
-    a_loss = compute_actor_loss(actor, critic, batch[0], processing, recurrent, normalize_critic)
+    a_loss = compute_actor_loss(actor, critic, batch[0], batch[3], processing, recurrent, normalize_critic)
     optimize(optimizer_actor, a_loss, actor, gradient_clipping)
     for p in critic.parameters(): # Unfreeze Q-net
         p.requires_grad = True
 
 
-def compute_actor_loss(actor, critic, state, processing, recurrent=False, normalize=False) -> torch.Tensor: 
+def compute_actor_loss(actor, critic, state, prev_action, processing, recurrent=False, normalize=False) -> torch.Tensor: 
     """ Returns policy loss -Q(s, mu(s)) """
-    action, _ = get_action_pobs(net=actor, state=state, recurrent=recurrent)
+    action, _ = get_action_pobs(net=actor, state=state, recurrent=recurrent, prev_action=prev_action)
     action = processing(action).to(device)
-    q_sa = critic(state.to(device), action.to(device)).to(device)
+    prev_action = torch.cat((action[0].unsqueeze(0), action[:-1]), dim=0).to(device)
+    q_sa = critic(state.to(device), action.to(device), prev_action.to(device)).to(device)
     if len(q_sa) > 1 and normalize:
         q_sa = ((q_sa - q_sa.mean()) / (q_sa.std() + float(np.finfo(np.float32).eps))).to(device)
     loss = -1*torch.mean(q_sa) 
@@ -61,8 +62,9 @@ def compute_actor_loss(actor, critic, state, processing, recurrent=False, normal
 
 def cumpute_critic_loss_alternative(critic, batch, normalize=True) -> torch.Tensor: 
     """ Returns error Q(s_t, a) - R_t+1 """
-    state, action, reward, _ = batch
-    q_sa = critic(state.to(device), action.view(action.shape[0], -1).to(device)).squeeze().to(device)
+    state, action, reward, prev_action = batch
+    q_sa = critic(state.to(device), action.view(action.shape[0], -1).to(device), prev_action.view(prev_action.shape[0], -1).to(device)).squeeze().to(device)
+    #q_sa = critic(state.to(device), action.view(action.shape[0], -1).to(device)).squeeze().to(device)
     if len(reward) > 1 and normalize:
         reward = ((reward - reward.mean()) / (reward.std() + float(np.finfo(np.float32).eps))).to(device)
     loss = criterion(q_sa, reward.to(device))
@@ -71,6 +73,7 @@ def cumpute_critic_loss_alternative(critic, batch, normalize=True) -> torch.Tens
 
 def compute_critic_loss(critic, batch, actor_target, critic_target, processing, recurrent, discount_factor=0, normalize=True) -> torch.Tensor: 
     """ Returns error Q(s_t, a) - (R_t+1 + Q(S_t+1, mu(s_t+1))) """
+    # ! Doesnt work now that i have changed the replay memory and networks 
     state, action, reward, next_state = batch
     if len(reward) > 1 and normalize:
         reward = ((reward - reward.mean()) / (reward.std() + float(np.finfo(np.float32).eps))).to(device) # does this actually improve performance here?
@@ -151,7 +154,8 @@ def deep_determinstic_policy_gradient(
     done = False
     state = env.reset() #S_0
     hx = None 
-
+    prev_action = None
+    
     if not train:
         exploration_min = 0
         exploration_rate = exploration_min
@@ -169,10 +173,12 @@ def deep_determinstic_policy_gradient(
         actions = []
 
         for i in range(max_episode_length):
-            action, hx = act(actor_net, state, hx, recurrent, exploration_rate, train) 
+            action, hx = act(actor_net, state, prev_action, hx, recurrent, exploration_rate, train) 
             next_state, reward, done, _ = env.step(action) 
 
             if done:
+                if recurrent: 
+                    replay_buffer.push(None, None, None, None)
                 break
 
             actions.append(action)
@@ -180,7 +186,9 @@ def deep_determinstic_policy_gradient(
             replay_buffer.push(torch.from_numpy(state).float().unsqueeze(0).to(device), 
                                torch.FloatTensor(np.array([action])), 
                                torch.FloatTensor([reward]), 
-                               torch.from_numpy(next_state).float().unsqueeze(0).to(device))
+                               torch.FloatTensor(np.zeros((1, action.shape[0]))) if prev_action is None else torch.FloatTensor(np.array(prev_action)))
+                               #torch.from_numpy(next_state).float().unsqueeze(0).to(device))
+            prev_action = torch.Tensor(action).unsqueeze(0)
 
             if train and len(replay_buffer) >= batch_size and (i+1) % update_freq == 0:
                 update(replay_buffer=replay_buffer, 
@@ -211,6 +219,7 @@ def deep_determinstic_policy_gradient(
             action_history.append(np.array(total_actions))
             state = env.reset()
             hx = None
+            prev_action = None
             total_rewards = []
             total_actions = []
             exploration_rate = max(exploration_rate*exploration_decay, exploration_min)

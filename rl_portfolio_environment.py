@@ -1,5 +1,5 @@
 import numpy as np
-from transaction_cost_model import transaction_cost_model
+#from transaction_cost_model import transaction_cost_model
 
 
 class PortfolioEnvironment():
@@ -50,6 +50,7 @@ class PortfolioEnvironment():
                         #price_old=self.states[self.current_index-1][:self.num_instruments], 
                         price_new=self.prices[self.current_index],
                         price_old=self.prices[self.current_index-1],
+                        transaction_fraction=self.transaction_fraction,
                         transaction_cost=self.transaction_cost)
         
         # Add returns to array of old returns
@@ -57,7 +58,7 @@ class PortfolioEnvironment():
         self.returns[-1] = np.sum(ret)
 
         if self.downside_deviation: 
-            risk_punishment = np.nan_to_num(np.std(self.returns[self.returns<0]))
+            risk_punishment = np.nan_to_num(np.std(self.returns.clip(max=0)))
         else: 
             risk_punishment = np.std(self.returns)
 
@@ -87,6 +88,15 @@ def asset_return(position_new, position_old, price_new, price_old, transaction_f
     """ R_t = a_{t-1} * log(p_t / p_{t-1}) - transaction costs """
     rtn = position_new * np.log((price_new + float(np.finfo(np.float32).eps))/(price_old + float(np.finfo(np.float32).eps)))
     if transaction_cost: 
-        rtn -= transaction_fraction * np.abs(position_new - position_old)
+        #rtn -= transaction_fraction * np.abs(position_new - position_old)
         #rtn -= transaction_cost_model(position_new, position_old, price_new, price_old, transaction_fraction)[0]
+        rtn -= transaction_costs(position_new, position_old, price_new, price_old, transaction_fraction)
     return rtn
+
+def transaction_costs(position_new, position_old, price_new, price_old, transaction_fraction=0.0002):
+    """ Transaction costs for single instrument trading """
+    price_changes = ((price_new + float(np.finfo(np.float32).eps)) /(price_old + float(np.finfo(np.float32).eps))) 
+    weight_as_result_of_price_change = (position_old * price_changes) / ((position_old * (price_changes-1)) + 1)
+    required_rebalance = np.abs(position_new - weight_as_result_of_price_change)
+    t_costs = transaction_fraction * required_rebalance
+    return t_costs
