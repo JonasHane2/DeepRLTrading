@@ -65,7 +65,7 @@ class AConvLSTMDiscrete(nn.Module): #DRQN
         x = nn_activation_function(x)
         if prev_action is None: 
             prev_action = torch.Tensor(np.zeros((x.shape[0],self.prev_action_size))).to(device) 
-        x = torch.cat((x, prev_action), dim=1) # Add previous action to feature map
+        x = torch.cat((x, prev_action.to(device)), dim=1).to(device) # Add previous action to feature map
         x = self.fc_out(x)
         return x, hx
 
@@ -107,7 +107,7 @@ class AConvDiscrete(nn.Module): #DQN
         x = x.view(x.shape[0], -1) #Add all activation maps to one big activation map
         if prev_action is None: 
             prev_action = torch.Tensor(np.zeros((x.shape[0],self.prev_action_size))).to(device) 
-        x = torch.cat((x, prev_action), dim=1) # Add previous action to feature map
+        x = torch.cat((x, prev_action.to(device)), dim=1).to(device) # Add previous action to feature map
         x = self.fc_out(x)
         return x
 
@@ -142,7 +142,7 @@ class ALSTMDiscrete(nn.Module):
         x = nn_activation_function(x)
         if prev_action is None: 
             prev_action = torch.Tensor(np.zeros((x.shape[0],self.prev_action_size))).to(device) 
-        x = torch.cat((x, prev_action), dim=1) # Add previous action to feature map
+        x = torch.cat((x, prev_action.to(device)), dim=1).to(device) # Add previous action to feature map
         x = self.fc_out(x)
         return x, hx
 
@@ -172,7 +172,7 @@ class FFDiscrete(nn.Module):
         x = self.fc_in(x)
         if prev_action is None: 
             prev_action = torch.Tensor(np.zeros((x.shape[0],self.prev_action_size))).to(device)         
-        x = torch.cat((x, prev_action), dim=1) # Add previous action to feature map
+        x = torch.cat((x, prev_action.to(device)), dim=1).to(device) # Add previous action to feature map
         x = self.fc_out(x)
         return x
 
@@ -193,7 +193,7 @@ class LinearDiscrete(nn.Module):
     def forward(self, x, prev_action=None) -> torch.Tensor:
         if prev_action is None: 
             prev_action = torch.Tensor(np.zeros((x.shape[0],self.prev_action_size))).to(device)         
-        x = torch.cat((x, prev_action), dim=1) 
+        x = torch.cat((x, prev_action.to(device)), dim=1).to(device) 
         x = self.fc_out(x)
         return x
 
@@ -226,7 +226,7 @@ class CConvSA(nn.Module):
     def forward(self, state, action, prev_action=None):
         x = self.fc1(state)
         x = nn_activation_function(x)
-        x = torch.cat((x, action), dim=1)
+        x = torch.cat((x, action), dim=1).to(device)
         x = self.fc2(x)
         x = nn_activation_function(x)
         x = x.unsqueeze(1) 
@@ -234,7 +234,7 @@ class CConvSA(nn.Module):
         x = x.view(x.shape[0], -1)
         if prev_action is None: 
             prev_action = torch.Tensor(np.zeros((x.shape[0],self.prev_action_size))).to(device)         
-        x = torch.cat((x, prev_action), dim=1)
+        x = torch.cat((x, prev_action.to(device)), dim=1).to(device)
         x = self.fc3(x)
         return x
 
@@ -257,7 +257,8 @@ class CLSTMSA(nn.Module):
         
     def forward(self, state, action, prev_action=None, hx=None):
         x = self.fc_in(state)
-        x = torch.cat((x, action), dim=1)
+        x = torch.cat((x, action), dim=1).to(device)
+        self.lstm_layer.flatten_parameters()
         if hx is not None:
             x, hx = self.lstm_layer(x, hx)
         else: 
@@ -265,7 +266,7 @@ class CLSTMSA(nn.Module):
         x = nn_activation_function(x)
         if prev_action is None: 
             prev_action = torch.Tensor(np.zeros((x.shape[0],self.prev_action_size))).to(device)
-        x = torch.cat((x, prev_action), dim=1)
+        x = torch.cat((x, prev_action.to(device)), dim=1).to(device)
         x = self.fc_out(x)
         return x
 
@@ -288,13 +289,13 @@ class CFFSA(nn.Module):
         x = self.fc1(state)
         x = nn_activation_function(x)
         x = self.du1(x)
-        x = torch.cat((x, action), dim=1)
+        x = torch.cat((x, action), dim=1).to(device)
         x = self.fc2(x)
         x = nn_activation_function(x)
         x = self.du2(x)
         if prev_action is None: 
             prev_action = torch.Tensor(np.zeros((x.shape[0],self.prev_action_size))).to(device)         
-        x = torch.cat((x, prev_action), dim=1) 
+        x = torch.cat((x, prev_action.to(device)), dim=1).to(device) 
         x = self.fc3(x)
         return x
 
@@ -310,9 +311,9 @@ class CLinearSA(nn.Module):
         self.fc_out.weight.data.normal_(0, out_layer_std)
 
     def forward(self, state, action, prev_action=None) -> torch.Tensor:
-        x = torch.cat((state, action), dim=1)
+        x = torch.cat((state, action), dim=1).to(device)
         if prev_action is None: 
             prev_action = torch.Tensor(np.zeros((x.shape[0],self.prev_action_size))).to(device)         
-        x = torch.cat((x, prev_action), dim=1) 
+        x = torch.cat((x, prev_action.to(device)), dim=1).to(device) 
         x = self.fc_out(x)
         return x
