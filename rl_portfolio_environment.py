@@ -15,10 +15,10 @@ class PortfolioEnvironment():
         self.current_index = 0
         self.position = np.zeros((num_instruments,))
         num_prev_observations = max(int(num_prev_observations), 1)
-        self.observations = np.array([self.newest_observation() for _ in range(num_prev_observations)]) 
         self.returns = np.zeros((std_lookback,))
         self.std_factor = std_factor
         self.downside_deviation = downside_deviation
+        self.observations = np.array([self.newest_observation() for _ in range(num_prev_observations)]) 
 
     def reset(self) -> np.ndarray:
         """ Reset environment to start and return initial state """
@@ -32,7 +32,7 @@ class PortfolioEnvironment():
         if self.flatten_prev_observations:
             return self.observations.flatten()
         else: 
-            return self.observations
+            return self.observations.T
 
     def newest_observation(self) -> np.ndarray:
         """ Returns the current position inserted into the current state array, if specified. 

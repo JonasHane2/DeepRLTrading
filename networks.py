@@ -14,9 +14,9 @@ def weights_init(m):
         nn.init.kaiming_normal_(m.weight)
         m.bias.data.fill_(0.01)
 
-def _get_seq_out(seq, shape) -> int:
+def _get_seq_out(seq, shape, in_channels=1) -> int:
     """ Returns the output dimension of a convolutional sequence. """
-    o = seq(torch.zeros(1, 1, shape))
+    o = seq(torch.zeros(1, in_channels, shape))
     return int(np.prod(o.size())) 
 
 
@@ -31,8 +31,8 @@ class AConvLSTMDiscrete(nn.Module): #DRQN
             self.prev_action_size = action_space
         self.fc_in = nn.Sequential(
             nn.Linear(observation_space, hidden_size), 
-            nn_activation_function,
-            nn.Dropout(p=dropout), 
+            #nn_activation_function,
+            #nn.Dropout(p=dropout), 
         )
         self.conv = nn.Sequential(
             nn.Conv1d(1, hidden_size, kernel_size=4, stride=2), 
@@ -62,7 +62,7 @@ class AConvLSTMDiscrete(nn.Module): #DRQN
             x, hx = self.lstm_layer(x, hx)
         else: 
             x, hx = self.lstm_layer(x)
-        x = nn_activation_function(x)
+        #x = nn_activation_function(x)
         if prev_action is None: 
             prev_action = torch.Tensor(np.zeros((x.shape[0],self.prev_action_size))).to(device) 
         x = torch.cat((x, prev_action.to(device)), dim=1).to(device) # Add previous action to feature map
@@ -72,7 +72,7 @@ class AConvLSTMDiscrete(nn.Module): #DRQN
 
 ## ----------------- Convolutional
 class AConvDiscrete(nn.Module): #DQN
-    def __init__(self, observation_space=8, hidden_size=128, action_space=3, prev_action_size=None, dropout=0.1, kaiming_init=False):
+    def __init__(self, observation_space=8, hidden_size=128, action_space=3, prev_action_size=None, dropout=0.1, in_channels=1, kaiming_init=False, flattened_state=False, kernel_size_1=5, stride_1=3, kernel_size_2=3, stride_2=1, kernel_size_pooling=2, stride_pooling=1):
         super(AConvDiscrete, self).__init__()
         if prev_action_size is not None:
             self.prev_action_size = prev_action_size
@@ -80,29 +80,31 @@ class AConvDiscrete(nn.Module): #DQN
             self.prev_action_size = action_space
         self.fc_in = nn.Sequential(
             nn.Linear(observation_space, hidden_size), 
-            nn_activation_function,
-            nn.Dropout(p=dropout), 
+            #nn_activation_function,
+            #nn.Dropout(p=dropout), 
         )
         self.conv = nn.Sequential(
-            nn.Conv1d(1, hidden_size, kernel_size=4, stride=2), 
+            nn.Conv1d(in_channels, hidden_size, kernel_size=kernel_size_1, stride=stride_1), 
             nn_activation_function, 
-            nn.BatchNorm1d(hidden_size), #seems like batch norm functions better after activation than before
+            nn.BatchNorm1d(hidden_size), #seems like batch norm works better after activation than before
             nn.Dropout(p=dropout), 
-            nn.Conv1d(hidden_size, hidden_size, kernel_size=3, stride=1), 
-            nn.MaxPool1d(kernel_size=2, stride=2), 
+            nn.Conv1d(hidden_size, hidden_size, kernel_size=kernel_size_2, stride=stride_2), 
+            nn.MaxPool1d(kernel_size=kernel_size_pooling, stride=stride_pooling), 
             nn_activation_function,
             nn.BatchNorm1d(hidden_size),
             nn.Dropout(p=dropout), 
         )
-        conv_out = _get_seq_out(self.conv, hidden_size)
+        conv_out = _get_seq_out(self.conv, hidden_size, in_channels)
         self.fc_out = nn.Linear((conv_out+self.prev_action_size), action_space)
         if kaiming_init:
             self.apply(weights_init)
         self.fc_out.weight.data.normal_(0, out_layer_std)
+        self.flattened_state = flattened_state
 
     def forward(self, x, prev_action=None) -> torch.Tensor:
         x = self.fc_in(x)
-        x = x.unsqueeze(1) #Think you have to do this since there is no batch_first arg for conv nets
+        if not self.flattened_state:
+            x = x.unsqueeze(1) 
         x = self.conv(x)
         x = x.view(x.shape[0], -1) #Add all activation maps to one big activation map
         if prev_action is None: 
@@ -123,8 +125,8 @@ class ALSTMDiscrete(nn.Module):
             self.prev_action_size = action_space
         self.fc_in = nn.Sequential(
             nn.Linear(observation_space, hidden_size), 
-            nn_activation_function,
-            nn.Dropout(p=dropout), 
+            #nn_activation_function,
+            #nn.Dropout(p=dropout), 
         )
         self.lstm_layer = nn.LSTM(input_size=hidden_size, hidden_size=hidden_size, num_layers=n_layers, batch_first=True, dropout=dropout)
         self.fc_out = nn.Linear((hidden_size+self.prev_action_size), action_space)        
@@ -139,7 +141,7 @@ class ALSTMDiscrete(nn.Module):
             x, hx = self.lstm_layer(x, hx)
         else: 
             x, hx = self.lstm_layer(x)
-        x = nn_activation_function(x)
+        #x = nn_activation_function(x)
         if prev_action is None: 
             prev_action = torch.Tensor(np.zeros((x.shape[0],self.prev_action_size))).to(device) 
         x = torch.cat((x, prev_action.to(device)), dim=1).to(device) # Add previous action to feature map
