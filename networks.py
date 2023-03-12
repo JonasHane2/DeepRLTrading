@@ -117,7 +117,7 @@ class AConvDiscrete(nn.Module): #DQN
 ## ----------------- LSTM 
 # Seems like performance increases if there is an activation function after lstm layer
 class ALSTMDiscrete(nn.Module):
-    def __init__(self, observation_space=8, hidden_size=128, action_space=3, prev_action_size=None, n_layers=1, dropout=0.1, kaiming_init=False) -> None:
+    def __init__(self, observation_space=8, hidden_size=128, action_space=3, prev_action_size=None, n_layers=1, dropout=0.1, kaiming_init=False, layer_norm=True) -> None:
         super(ALSTMDiscrete, self).__init__()
         if prev_action_size is not None:
             self.prev_action_size = prev_action_size
@@ -133,6 +133,9 @@ class ALSTMDiscrete(nn.Module):
         if kaiming_init:
             self.apply(weights_init)
         self.fc_out.weight.data.normal_(0, out_layer_std)
+        self.layer_norm = layer_norm
+        self.ln = nn.LayerNorm(hidden_size)
+        self.do = nn.Dropout(p=dropout)
 
     def forward(self, x, prev_action=None, hx=None):
         x = self.fc_in(x)
@@ -141,6 +144,9 @@ class ALSTMDiscrete(nn.Module):
             x, hx = self.lstm_layer(x, hx)
         else: 
             x, hx = self.lstm_layer(x)
+        if self.layer_norm:
+            x = x = self.ln(x) #TODO maybe add between lstm layers
+        x = self.do(x) 
         #x = nn_activation_function(x)
         if prev_action is None: 
             prev_action = torch.Tensor(np.zeros((x.shape[0],self.prev_action_size))).to(device) 
