@@ -174,6 +174,36 @@ def get_state_and_non_norm_price(prices: list, volumes: list, idx: list, labels:
     return states, non_norm_prices
 
 
+def get_close_and_high_and_low_price(df: pd.DataFrame, indices: np.ndarray, close_price: pd.Series, log_change=True, volatility_adjusting=True, volatility_period=60):
+    """ Returns a 3xm matrix with the close high and low price for the given indicies. 
+        The prices are normalised by returns or log returns and divided by volatility. 
+    """
+    high = [df['Price'].loc[indices[i]:indices[i+1]].max() for i in range(len(indices)-1)]
+    low = [df['Price'].loc[indices[i]:indices[i+1]].min() for i in range(len(indices)-1)]
+
+    if log_change: 
+        high = np.nan_to_num(np.log(high / close_price[:-1].values))  
+        low = np.nan_to_num(np.log(low / close_price[:-1].values)) 
+        close = np.nan_to_num(np.log(close_price[1:].values / close_price[:-1].values))
+    else:
+        high = (high / close_price[:-1].values) - 1    
+        low = (low / close_price[:-1].values) - 1
+        close = (close_price[1:].values / close_price[:-1].values) - 1
+
+    high = np.insert(high, 0, 0, axis=0)
+    low = np.insert(low, 0, 0, axis=0)    
+    close = np.insert(close, 0, 0, axis=0)
+
+    if volatility_adjusting:
+        rolling_volatility = pd.Series(close).rolling(volatility_period).std()
+        high = (high/(rolling_volatility*np.sqrt(volatility_period))).fillna(0).values
+        low = (low/(rolling_volatility*np.sqrt(volatility_period))).fillna(0).values
+        close = (close/(rolling_volatility*np.sqrt(volatility_period))).fillna(0).values
+
+    close_high_low = np.concatenate(([close], [high], [low]), axis=0).T
+    return close_high_low
+
+
 def get_next_month_contracts(df: pd.DataFrame) -> pd.DataFrame:
     """ Returns the contracts that have delivery the subsequent month """
     next_month_series = df[df['FirstSequenceItemName'] == df.index.shift(1, freq="MS").strftime("%b-%y")]
@@ -214,7 +244,7 @@ def get_state_array_time_freq(dfs: list, labels: list, freq="1D", returns_lag=[1
     return get_state_and_non_norm_price(prices_intersection, volumes, index_intersection, labels, returns_lag, riskfree_asset, train_freq=train_freq)
 
 
-def get_state_array_bars(dfs: list, labels: list, bar_type='tick', avg_bars_per_day=1, returns_lag=[1,5,20], riskfree_asset=False, imbalance_bars=False, train_freq=1): 
+def get_state_array_bars(dfs: list, labels: list, bar_type='tick', avg_bars_per_day=1, returns_lag=[1,5,20], riskfree_asset=False, imbalance_bars=False, train_freq=1, log_change=True, volatility_adjusting=True, volatility_period=60): 
     """
     Args:
         dfs (list):                 a list of dataframes that consists of trade information of different instruments.
@@ -249,5 +279,7 @@ def get_state_array_bars(dfs: list, labels: list, bar_type='tick', avg_bars_per_
     index_union = index_union[index_union<earliest_last_id]
     prices = [get_price_dataframe_bars(d, index_union) for d in dfs]
     volumes = [get_volume_dataframe_bars(d, index_union) for d in dfs]
-    return get_state_and_non_norm_price(prices, volumes, index_union, labels, returns_lag, riskfree_asset, train_freq=train_freq)
-    
+    close_high_low = np.array([get_close_and_high_and_low_price(df, index_union, p, log_change, volatility_adjusting, volatility_period) for df, p in zip(dfs, prices)])
+    states, non_norm_prices = get_state_and_non_norm_price(prices, volumes, index_union, labels, returns_lag, riskfree_asset, train_freq=train_freq)
+    states = np.concatenate((states, *close_high_low), axis=1)
+    return states, non_norm_prices
