@@ -201,6 +201,7 @@ def get_close_and_high_and_low_price(df: pd.DataFrame, indices: np.ndarray, clos
         close = (close/(rolling_volatility*np.sqrt(volatility_period))).fillna(0).values
 
     close_high_low = np.concatenate(([close], [high], [low]), axis=0).T
+    close_high_low = np.clip(close_high_low, -1, 1)
     return close_high_low
 
 
