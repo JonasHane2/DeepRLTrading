@@ -4,12 +4,13 @@ import numpy as np
 
 class PortfolioEnvironment():
 
-    def __init__(self, states, prices, num_instruments=1, transaction_fraction=0.002, num_prev_observations=10, flatten_prev_observations=True, transaction_cost=False, add_prev_position=False, std_lookback=60, std_factor=0, downside_deviation=False) -> None:
+    def __init__(self, states, prices, num_instruments=1, transaction_fraction=0.002, num_prev_observations=10, flatten_prev_observations=True, transpose_prev_obs=True, transaction_cost=False, add_prev_position=False, std_lookback=60, std_factor=0, downside_deviation=False) -> None:
         self.prices = prices
         self.transaction_fraction = max(float(transaction_fraction), 0.0)
         self.transaction_cost = transaction_cost        
         self.add_prev_position = add_prev_position
         self.flatten_prev_observations = flatten_prev_observations
+        self.transpose_prev_obs = transpose_prev_obs
         self.num_instruments = num_instruments
         self.states = states
         self.current_index = 0
@@ -32,7 +33,10 @@ class PortfolioEnvironment():
         if self.flatten_prev_observations:
             return self.observations.flatten()
         else: 
-            return self.observations.T
+            if self.transpose_prev_obs:
+                return self.observations.T
+            else: 
+                return self.observations
 
     def newest_observation(self) -> np.ndarray:
         """ Returns the current position inserted into the current state array, if specified. 

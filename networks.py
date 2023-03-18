@@ -21,6 +21,36 @@ def _get_seq_out(seq, shape, in_channels=1) -> int:
 
 
 # ------------------ State
+## ----------------- Transformer Encoder
+class TransformerEncoderDiscrete(nn.Module):
+    def __init__(self, observation_space=8, hidden_size=128, action_space=1, prev_action_size=None, n_layers=2, nhead=8, dropout=0.2, kaiming_init=True, layer_norm=True, dim_feedforward=256) -> None:
+        super(TransformerEncoderDiscrete, self).__init__()
+        if prev_action_size is not None:
+            self.prev_action_size = prev_action_size
+        else: 
+            self.prev_action_size = action_space
+        self.fc_in = nn.Sequential(
+            nn.Linear(observation_space, hidden_size),  
+        )
+        self.t_layer = nn.TransformerEncoderLayer(d_model=hidden_size, nhead=nhead, norm_first=layer_norm, batch_first=True, dropout=dropout, activation=nn_activation_function, dim_feedforward=dim_feedforward)
+        self.transformerE = nn.TransformerEncoder(self.t_layer, num_layers=n_layers)
+        self.fc_out = nn.Linear((hidden_size+self.prev_action_size), action_space)        
+        if kaiming_init:
+            self.apply(weights_init)
+        self.fc_out.weight.data.normal_(0, out_layer_std)
+
+    def forward(self, x, prev_action=None, hx=None):
+        x = self.fc_in(x)
+        x = self.transformerE(x)
+        if len(x.shape) == 3 and x.shape[1] > 1:
+            x = x.squeeze()[-1].unsqueeze(0)
+        if prev_action is None: 
+            prev_action = torch.Tensor(np.zeros((x.shape[0], self.prev_action_size))).to(device) 
+        x = torch.cat((x, prev_action.to(device)), dim=1).to(device) # Add previous action to feature map
+        x = self.fc_out(x)
+        return x, hx
+
+
 ## ----------------- Convolutional + LSTM
 class AConvLSTMDiscrete(nn.Module): #DRQN
     def __init__(self, observation_space=8, hidden_size=128, action_space=3, prev_action_size=None, window_size=1, num_lstm_layers=1, action_bounds=1, dropout=0, kaiming_init=False):
@@ -152,6 +182,8 @@ class ALSTMDiscrete(nn.Module):
             x, hx = self.lstm_layer(x, hx)
         else: 
             x, hx = self.lstm_layer(x)
+        if len(x.shape) == 3 and x.shape[1] > 1:
+            x = x.squeeze()[-1].unsqueeze(0)
         x = self.do(x) 
         #x = nn_activation_function(x)
         if prev_action is None: 
