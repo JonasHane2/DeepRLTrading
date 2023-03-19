@@ -19,7 +19,7 @@ class ReplayMemory(object):
         return len(self.memory)
 
 
-def get_batch(replay_buffer: ReplayMemory, batch_size: int, recurrent=False):
+def get_batch(replay_buffer: ReplayMemory, batch_size: int, recurrent=False, env_copy=False):
     """ Return a batch of concatenated S, A, R, S' values in random order """
     if len(replay_buffer) < batch_size:
         return
@@ -30,7 +30,10 @@ def get_batch(replay_buffer: ReplayMemory, batch_size: int, recurrent=False):
     else:
         batch = replay_buffer.sample(batch_size)
     batch = Transition(*zip(*batch))
-    return torch.cat(batch.state), torch.cat(batch.action) , torch.cat(batch.reward), torch.cat(batch.next_state)
+    if env_copy:
+        return torch.cat(batch.state), batch.action, torch.cat(batch.reward), torch.cat(batch.next_state)
+    else:
+        return torch.cat(batch.state), torch.cat(batch.action) , torch.cat(batch.reward), torch.cat(batch.next_state)
 
 
 def get_sequential_batch(replay_buffer: ReplayMemory, batch_size: int):
