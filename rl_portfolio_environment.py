@@ -1,4 +1,5 @@
 import numpy as np
+import torch
 #from transaction_cost_model import transaction_cost_model
 
 
@@ -16,8 +17,10 @@ class PortfolioEnvironment():
         self.current_index = 0
         self.position = np.zeros((num_instruments,))
         num_prev_observations = max(int(num_prev_observations), 1)
-        self.returns = np.zeros((std_lookback,))
+        #self.returns = np.zeros((std_lookback,))
+        self.returns = np.zeros((len(prices),))
         self.std_factor = std_factor
+        self.std_lookback = std_lookback
         self.downside_deviation = downside_deviation
         self.observations = np.array([self.newest_observation() for _ in range(num_prev_observations)]) 
 
@@ -46,7 +49,7 @@ class PortfolioEnvironment():
         else:
             return self.states[self.current_index]
 
-    def reward_function(self, action) -> float: 
+    def reward_function(self, action, add_reward_to_history=True) -> float: 
         """ Returns reward signal based on the environments chosen reward function. """
         ret = asset_return(position_new=action, 
                         position_old=self.position, 
@@ -58,13 +61,15 @@ class PortfolioEnvironment():
                         transaction_cost=self.transaction_cost)
         
         # Add returns to array of old returns
-        self.returns = np.roll(self.returns,-1)
-        self.returns[-1] = np.sum(ret)
+        if add_reward_to_history:
+            self.returns[self.current_index-1] = ret
+            #self.returns = np.roll(self.returns,-1)
+            #self.returns[-1] = np.sum(ret)
 
         if self.downside_deviation: 
-            risk_punishment = np.nan_to_num(np.std(self.returns.clip(max=0)))
+            risk_punishment = np.nan_to_num(np.std(self.returns[max(0, (self.current_index-self.std_lookback)):self.current_index].clip(max=0)))
         else: 
-            risk_punishment = np.std(self.returns)
+            risk_punishment = np.std(self.returns[max(0, (self.current_index-self.std_lookback)):self.current_index])
 
         return np.sum(ret) - (self.std_factor * risk_punishment)
 
@@ -86,6 +91,15 @@ class PortfolioEnvironment():
         self.position = action
         self.observations = np.concatenate((self.observations[1:], [self.newest_observation()]), axis=0) # FIFO state vector update
         return self.state(), reward, False, {}
+
+    def replay_reward(self, timestep: int, action):
+        """ Function used in replay memory to simulate past rewards.
+            The timestep refers to when the simulated experience is. """
+        temp = self.current_index
+        self.current_index = timestep
+        reward = self.reward_function(action, add_reward_to_history=True) 
+        self.current_index = temp
+        return reward
 
 
 def asset_return(position_new, position_old, price_new, price_old, transaction_fraction=0.0002, transaction_cost=True) -> np.ndarray:

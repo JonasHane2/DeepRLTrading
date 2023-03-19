@@ -33,24 +33,24 @@ def get_policy_loss(rewards: list, log_probs: list, normalize=True) -> torch.Ten
 
 def update(replay_buffer: ReplayMemory, batch_size: int, 
            policy: torch.nn.Module, optimizer: torch.optim,
-           act, exploration_rate: float, recurrent=False, 
+           act, env, exploration_rate: float, recurrent=False, 
            gradient_clipping=True) -> None: 
     """ Get batch, get loss and optimize policy """
     batch = get_batch(replay_buffer=replay_buffer, batch_size=batch_size, recurrent=recurrent, env_copy=True) 
     if batch is None:
         return
-    policy_loss = get_policy_loss_2(batch=batch, policy=policy, recurrent=recurrent, act=act, exploration_rate=exploration_rate)
+    policy_loss = get_policy_loss_2(batch=batch, policy=policy, recurrent=recurrent, act=act, env=env, exploration_rate=exploration_rate)
     optimize(optimizer=optimizer, loss=policy_loss, net=policy, gradient_clipping=gradient_clipping)
 
 
-def get_policy_loss_2(batch, policy, recurrent, act, exploration_rate) -> torch.Tensor:
+def get_policy_loss_2(batch, policy, recurrent, act, env, exploration_rate) -> torch.Tensor:
     """ Get policy loss by looping through states in batch memory, performing actions and observing rewards """
     hxt = None
     log_probs = []
-    state, env, _, prev_action = batch
-    for s, e, pa in zip(state, env, prev_action):
-        action, log_prob, hxt = act(policy, s.numpy(), pa.unsqueeze(0), hxt, recurrent, exploration_rate) 
-        _, reward, done, _ = e.step(action) 
+    state, prev_action, timestep, _ = batch
+    for s, pa, t in zip(state, prev_action, timestep):
+        action, log_prob, hxt = act(policy, s.numpy(), pa, hxt, recurrent, exploration_rate) 
+        reward = env.replay_reward(timestep=int(t.numpy()), action=action)
         log_probs.append(log_prob*reward)
     log_probs = torch.stack(log_probs).squeeze().to(device)
     policy_loss = log_probs.mul(-1).sum().to(device)
@@ -131,6 +131,7 @@ def reinforce(policy_network: torch.nn.Module, env, act, alpha=1e-3,
         for i in range(max_episode_length):
             action, log_prob, hx = act(policy_network, state, prev_action, hx, recurrent, exploration_rate) #A_{t-1}
             state, reward, done, _ = env.step(action) # S_t, R_t 
+            prev_action = torch.Tensor(action).unsqueeze(0)
 
             if done:
                 if recurrent: 
@@ -142,11 +143,9 @@ def reinforce(policy_network: torch.nn.Module, env, act, alpha=1e-3,
             log_probs.append(log_prob)
 
             replay_buffer.push(torch.from_numpy(state).float().unsqueeze(0).to(device), 
-                               deepcopy(env), 
-                               torch.Tensor(), 
-                               torch.FloatTensor(np.zeros((1, action.shape[0]))) if prev_action is None else torch.FloatTensor(np.array(prev_action)))
-                               #torch.from_numpy(next_state).float().unsqueeze(0).to(device))
-            prev_action = torch.Tensor(action).unsqueeze(0)
+                               torch.FloatTensor(np.array([action])), 
+                               torch.FloatTensor([env.current_index]), 
+                               torch.FloatTensor(np.array(prev_action)))
             
             if replay_memory and train and len(replay_buffer) >= batch_size and (i+1) % update_freq == 0:
                 update(replay_buffer=replay_buffer, 
@@ -155,6 +154,7 @@ def reinforce(policy_network: torch.nn.Module, env, act, alpha=1e-3,
                        optimizer=optimizer,
                        recurrent=recurrent, 
                        act=act,
+                       env=env,
                        exploration_rate=exploration_rate,
                        gradient_clipping=gradient_clipping)  
 
