@@ -50,7 +50,7 @@ def get_policy_loss_2(batch, policy, recurrent, act, env, exploration_rate) -> t
     state, prev_action, timestep, _ = batch
     for s, pa, t in zip(state, prev_action, timestep):
         action, log_prob, hxt = act(policy, s.numpy(), pa, hxt, recurrent, exploration_rate) 
-        reward = env.replay_reward(timestep=int(t.numpy()), action=action)
+        reward = env.replay_reward(timestep=int(t.numpy()), action=action, prev_action=pa.numpy()[0])
         log_probs.append(log_prob*reward)
     log_probs = torch.stack(log_probs).squeeze().to(device)
     policy_loss = log_probs.mul(-1).sum().to(device)

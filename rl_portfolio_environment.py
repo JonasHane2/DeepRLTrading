@@ -92,13 +92,16 @@ class PortfolioEnvironment():
         self.observations = np.concatenate((self.observations[1:], [self.newest_observation()]), axis=0) # FIFO state vector update
         return self.state(), reward, False, {}
 
-    def replay_reward(self, timestep: int, action):
+    def replay_reward(self, timestep: int, action, prev_action):
         """ Function used in replay memory to simulate past rewards.
             The timestep refers to when the simulated experience is. """
-        temp = self.current_index
+        temp_index = self.current_index
+        temp_position = self.position
         self.current_index = timestep
+        self.position = prev_action
         reward = self.reward_function(action, add_reward_to_history=True) 
-        self.current_index = temp
+        self.current_index = temp_index
+        self.position = temp_position
         return reward
 
 
